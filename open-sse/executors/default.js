@@ -210,12 +210,6 @@ export class DefaultExecutor extends BaseExecutor {
     }
 
     if (stream) headers["Accept"] = "text/event-stream";
-
-    // Applied last so a configured rule replaces anything set above. This
-    // executor builds its own headers via applyAuth() and does not call
-    // super.buildHeaders(), so the base implementation cannot cover it.
-    applyCustomHeaders(headers, this.provider);
-
     return headers;
   }
 

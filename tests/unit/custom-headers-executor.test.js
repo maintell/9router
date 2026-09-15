@@ -85,6 +85,45 @@ describe("custom headers reach the upstream request", () => {
     expect(headers[authKeys[0]]).toBe("Bearer custom");
   });
 
+  it("applies rules to an executor that overrides buildHeaders without calling super", async () => {
+    // Regression guard: the hook lives in base.execute() after the
+    // this.buildHeaders() call, precisely because subclasses override
+    // buildHeaders and never call super. A hook at the end of the base
+    // buildHeaders would silently miss every one of them.
+    const { __setRulesForTest } = await loadHeaders();
+    const { BaseExecutor } = await import("../../open-sse/executors/base.js");
+
+    class OverridingExecutor extends BaseExecutor {
+      constructor() {
+        // config is required: getBaseUrls() reads this.config.baseUrls.
+        super("openai", { baseUrl: "https://example.test/v1/chat/completions" });
+      }
+      buildHeaders() {
+        // Deliberately does NOT call super.
+        return { Authorization: "Bearer own", "X-Own": "1" };
+      }
+    }
+
+    __setRulesForTest({ openai: [{ name: "X-Client", mode: "static", value: "9router" }] });
+    const ex = new OverridingExecutor();
+    try {
+      await ex.execute({
+        model: "gpt-4",
+        body: { messages: [{ role: "user", content: "hi" }] },
+        stream: false,
+        credentials: { apiKey: "k", provider: "openai" },
+        log: null,
+      });
+    } catch { /* stub response may not parse */ }
+
+    expect(calls.length).toBeGreaterThan(0);
+    const headers = calls[0].opts.headers;
+    expect(headers["X-Client"]).toBe("9router");
+    // The subclass's own headers survive.
+    expect(headers["X-Own"]).toBe("1");
+    expect(headers.Authorization).toBe("Bearer own");
+  });
+
   it("applies no custom headers for a provider without rules", async () => {
     const { __setRulesForTest } = await loadHeaders();
     __setRulesForTest({ openai: [{ name: "X-Client", mode: "static", value: "v" }] });

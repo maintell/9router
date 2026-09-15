@@ -73,11 +73,6 @@ export class BaseExecutor {
       headers["Accept"] = "text/event-stream";
     }
 
-    // Applied last so a configured rule replaces anything set above (including
-    // Authorization). Specialised executors call super.buildHeaders(), so this
-    // covers them too.
-    applyCustomHeaders(headers, this.provider);
-
     return headers;
   }
 
@@ -134,6 +129,14 @@ export class BaseExecutor {
       const url = this.buildUrl(model, stream, urlIndex, credentials);
       const transformedBody = this.transformRequest(model, body, stream, credentials);
       const headers = this.buildHeaders(credentials, stream, url, model);
+
+      // Applied here rather than inside buildHeaders(): that method is
+      // overridden by many executors which never call super, so a hook at the
+      // end of the base implementation would be bypassed. Applying it after
+      // the call covers every executor that routes through base.execute,
+      // whatever its buildHeaders does. Being in the retry loop also means a
+      // random value is regenerated per attempt, as intended.
+      applyCustomHeaders(headers, this.provider);
 
       if (!retryAttemptsByUrl[urlIndex]) retryAttemptsByUrl[urlIndex] = 0;
 
