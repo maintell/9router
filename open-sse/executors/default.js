@@ -5,11 +5,17 @@ import { resolveOpenAICompatibleApiType } from "../services/provider.js";
 import { OAUTH_ENDPOINTS, buildKimiHeaders } from "../config/appConstants.js";
 import { buildClineHeaders } from "../shared/clineAuth.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
+import { refreshAgnesToken } from "../services/tokenRefresh/providers/agnesToken.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
 
 // Auth header descriptors — derived from registry transport.auth, fallback to hardcoded defaults.
 const BEARER = { combined: true, header: "Authorization", scheme: "bearer" };
+
+// Credentials that carry only an access_token and renew by presenting it
+// (Agnes). Defined locally so the executor stays independent of the refresh
+// service; PROVIDER_OAUTH is already imported above.
+const isAccessOnly = (provider) => PROVIDER_OAUTH[provider]?.accessOnly === true;
 const XAPIKEY = { combined: true, header: "x-api-key", scheme: "raw" };
 const AUTH_DESCRIPTORS = Object.fromEntries(
   Object.entries(PROVIDERS)
@@ -217,7 +223,9 @@ export class DefaultExecutor extends BaseExecutor {
   }
 
   async refreshCredentials(credentials, log, proxyOptions = null) {
-    if (!credentials.refreshToken) return null;
+    // accessOnly providers (Agnes) carry no refreshToken; refresh on the
+    // access token instead. Everyone else keeps the existing behaviour.
+    if (!credentials.refreshToken && !isAccessOnly(this.provider)) return null;
 
     const refreshers = {
       claude: () => this.refreshFromGrant(credentials, proxyOptions),
@@ -229,7 +237,8 @@ export class DefaultExecutor extends BaseExecutor {
       clinepass: () => this.refreshCline(credentials.refreshToken, proxyOptions),
       kimi: () => this.refreshKimi(credentials, proxyOptions),
       "kimi-coding": () => this.refreshKimi(credentials, proxyOptions),
-      kilocode: () => this.refreshKilocode(credentials.refreshToken, proxyOptions)
+      kilocode: () => this.refreshKilocode(credentials.refreshToken, proxyOptions),
+      agnes: () => refreshAgnesToken(credentials.accessToken, log)
     };
 
     const refresher = refreshers[this.provider];

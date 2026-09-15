@@ -701,7 +701,11 @@ export function refreshZedToken() {
 export async function refreshWindsurfToken(credentials, log) {
   log?.info?.(
     "TOKEN_REFRESH",
-    "windsurf: apiKey is long-lived (no refresh_token flow) — skipping"
+    "windsurf: apiKey is long-lived (no refresh_token flow) �� skipping"
   );
   return null;
 }
+
+// Agnes lives in its own module: it has no refresh_token at all and renews by
+// presenting the access_token, which is unlike every refresher above.
+export { refreshAgnesToken } from "./providers/agnesToken.js";

@@ -58,3 +58,17 @@ describe("refreshAgnesToken", () => {
   });
 });
 
+describe("DefaultExecutor.refreshCredentials for agnes", () => {
+  it("returns an accessToken even with no refreshToken present", async () => {
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: "000000", data: { access_token: "rotated", expires_in: 86400 } }),
+    });
+    const { DefaultExecutor } = await import("../../open-sse/executors/default.js");
+    const ex = new DefaultExecutor("agnes", {});
+    const out = await ex.refreshCredentials({ accessToken: "old-exec" }, null);
+    expect(out && out.accessToken).toBe("rotated");
+  });
+});
+
