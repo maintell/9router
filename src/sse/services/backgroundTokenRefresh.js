@@ -2,7 +2,7 @@
 // Fail-open everywhere: tick errors and per-connection failures never kill the interval.
 
 import * as log from "../utils/logger.js";
-import { getRefreshLeadMs } from "open-sse/services/tokenRefresh.js";
+import { getRefreshLeadMs, isAccessOnly } from "open-sse/services/tokenRefresh.js";
 import { getCredentialExpiryMs } from "open-sse/services/oauthCredentialManager.js";
 
 /** Refresh when expiry is within 30 minutes (or the provider on-request lead, whichever larger). */
@@ -54,7 +54,8 @@ export function selectConnectionsNeedingRefresh(connections, nowMs = Date.now())
 
     const authType = String(conn.authType || "").toLowerCase().replace(/_/g, "");
     if (authType !== "oauth") continue;
-    if (!conn.refreshToken) continue;
+    // accessOnly providers (Agnes) have no refreshToken but still need keep-alive.
+    if (!conn.refreshToken && !isAccessOnly(conn.provider)) continue;
 
     const expiresAtMs = getCredentialExpiryMs(conn);
     if (expiresAtMs === null) continue;

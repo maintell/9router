@@ -1,4 +1,4 @@
-import { PROVIDERS } from "../config/providers.js";
+import { PROVIDERS, PROVIDER_OAUTH } from "../config/providers.js";
 import { OAUTH_ENDPOINTS, REFRESH_LEAD_MS } from "../config/appConstants.js";
 import {
   refreshXaiToken,
@@ -130,6 +130,13 @@ function vertexRefreshHandler(c, log) {
   const saJson = parseVertexSaJson(c.apiKey);
   if (!saJson) return null;
   return refreshVertexToken(saJson, log);
+}
+
+// Credentials that carry only an access_token and renew by presenting it
+// (Agnes). Existing providers always have a refreshToken, so this is false
+// for every current entry and no behaviour changes for them.
+export function isAccessOnly(provider) {
+  return PROVIDER_OAUTH[provider]?.accessOnly === true;
 }
 
 const REFRESH_HANDLERS = {
