@@ -46,6 +46,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
   // trae/windsurf: choose between browser OAuth (proxy) and paste-token (import)
   const [authMode, setAuthMode] = useState("browser"); // "browser" | "paste-token"
   const [pasteToken, setPasteToken] = useState("");
+  const [agnesToken, setAgnesToken] = useState("");
+  const [loopbackBlocked, setLoopbackBlocked] = useState(false);
   const [ideStatus, setIdeStatus] = useState(null);
   const popupRef = useRef(null);
   const pollingAbortRef = useRef(false);
@@ -317,16 +319,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         // loopback address: browsing on the server, or an SSH tunnel forwarding
         // the dashboard port. Reject anything else up front instead of letting
         // the user sign in and silently get nothing back.
-        const host = window.location.hostname;
-        if (host !== "127.0.0.1" && host !== "[::1]") {
-          throw new Error(
-            "Agnes login requires opening the dashboard over 127.0.0.1 — " +
-              "Agnes sends the code back to the browser's own loopback address, " +
-              "so it never arrives when the dashboard is opened at " +
-              `${window.location.host}. Browse on the server itself, or forward ` +
-              `the port with: ssh -L ${window.location.port || 20128}:127.0.0.1:${window.location.port || 20128} <server>`
-          );
-        }
+        // Don't hard-fail on a non-loopback host: the modal still offers the
+        // paste-a-token path, which works from anywhere.
+        setLoopbackBlocked(
+          window.location.hostname !== "127.0.0.1" && window.location.hostname !== "[::1]"
+        );
         redirectUri = `http://${window.location.host}/auth/callback`;
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
@@ -619,6 +616,22 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     try {
       setError(null);
 
+      // Agnes: the pasted value is an access_token, not an authorization code.
+      // Agnes renews by presenting the access_token itself, so one import is
+      // enough — the background scheduler keeps it alive from then on.
+      if (provider === "agnes" && agnesToken.trim()) {
+        const res = await fetch(`/api/oauth/agnes/import-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: agnesToken.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        setStep("success");
+        onSuccess?.();
+        return;
+      }
+
       // Paste-token mode (Trae/Windsurf): token goes straight to /exchange
       if (authMode === "paste-token" && PASTE_TOKEN_PROVIDERS[provider]) {
         const token = pasteToken.trim();
@@ -798,8 +811,67 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           </>
         )}
 
+        {/* Agnes: browser OAuth only works over loopback, so always offer the
+            paste-a-token path. Agnes renews with the access_token itself, so a
+            single import stays valid via the background refresh scheduler. */}
+        {provider === "agnes" && (step === "waiting" || step === "input" || step === "error") && (
+          <div className="space-y-4">
+            <div className="px-3 py-2 rounded-lg text-sm bg-blue-500/10 text-blue-700 dark:text-blue-300">
+              Agnes sends its login code to the browser&apos;s own 127.0.0.1, so
+              automatic sign-in only works when this dashboard is opened over
+              127.0.0.1. Pasting a token works from any address.
+            </div>
+
+            {loopbackBlocked ? (
+              <div className="px-3 py-2 rounded-lg text-sm bg-yellow-500/10 text-yellow-700 dark:text-yellow-300">
+                This dashboard is at {window.location.host}, not loopback — browser
+                sign-in cannot deliver the code. Paste a token below.
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
+                <span className="material-symbols-outlined text-base text-primary animate-spin">
+                  progress_activity
+                </span>
+                <span className="text-sm">Waiting for Agnes authorization…</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-text-muted uppercase tracking-wider">
+                Or paste an access token
+              </span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm text-text-muted">
+                In a browser, sign in at app.agnes-ai.com, then open DevTools →
+                Network, trigger any request, and copy the{" "}
+                <code className="font-mono text-xs">Authorization: Bearer …</code>{" "}
+                value. Or copy it from the Agnes web app&apos;s storage.
+              </p>
+              <Input
+                value={agnesToken}
+                onChange={(e) => setAgnesToken(e.target.value)}
+                placeholder="eyJhbGciOi…"
+                className="font-mono text-xs"
+                type="password"
+              />
+              <div className="flex gap-2">
+                <Button onClick={handleManualSubmit} fullWidth disabled={!agnesToken.trim()}>
+                  Connect
+                </Button>
+                <Button onClick={handleClose} variant="ghost" fullWidth>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Waiting + Manual Input combined (non-device-code, non-proxy) */}
-        {(step === "waiting" || step === "input") && !isDeviceCode && !PROXY_OAUTH_PROVIDERS.has(provider) && (
+        {(step === "waiting" || step === "input") && !isDeviceCode && !PROXY_OAUTH_PROVIDERS.has(provider) && provider !== "agnes" && (
           <>
             {/* Option A: Auto via popup */}
             <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">

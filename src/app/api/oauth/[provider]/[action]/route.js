@@ -324,6 +324,60 @@ export async function POST(request, { params }) {
       return NextResponse.json({ success: ok });
     }
 
+    // Agnes: accept an existing access_token directly.
+    //
+    // Agnes only returns an authorization code by POSTing to the browser's own
+    // 127.0.0.1, so browser OAuth works solely when the dashboard is opened
+    // over loopback (on the server, or through a port forward). That is not
+    // always practical. Because Agnes renews by presenting the access_token
+    // itself, handing 9router a token once is enough — the background scheduler
+    // keeps it alive indefinitely.
+    if (provider === "agnes" && action === "import-token") {
+      const token = typeof body?.accessToken === "string" ? body.accessToken.trim() : "";
+      if (!token) {
+        return NextResponse.json({ error: "Missing access token" }, { status: 400 });
+      }
+
+      // Validate against the real API before storing, so a typo is reported
+      // immediately rather than surfacing as a failed request later.
+      try {
+        const probe = await fetch("https://api-agnes-code.agnes-ai.com/v1/models", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!probe.ok) {
+          return NextResponse.json(
+            { error: `Agnes rejected this token (HTTP ${probe.status})` },
+            { status: 400 },
+          );
+        }
+      } catch (e) {
+        return NextResponse.json(
+          { error: `Could not reach Agnes: ${e?.message || "network error"}` },
+          { status: 502 },
+        );
+      }
+
+      try {
+        const connection = await createProviderConnection({
+          provider: "agnes",
+          authType: "oauth",
+          accessToken: token,
+          // No refresh token exists; the access token is its own renewal
+          // credential. See oauth.accessOnly.
+          refreshToken: token,
+          expiresIn: 86400,
+          expiresAt: new Date(Date.now() + 86400 * 1000).toISOString(),
+          testStatus: "active",
+        });
+        return NextResponse.json({ success: true, id: connection.id });
+      } catch (e) {
+        return NextResponse.json(
+          { error: e?.message || "Failed to save connection" },
+          { status: 500 },
+        );
+      }
+    }
+
     if (action === "exchange") {
       const { code, redirectUri, codeVerifier, state, meta } = body;
 
