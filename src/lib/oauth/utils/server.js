@@ -938,7 +938,7 @@ export function stopXiaomiMimoProxy() {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Agnes proxy on 127.0.0.1:<appPort>/auth/callback
+// Agnes proxy on 127.0.0.1:1456/auth/callback
 //
 // Agnes' login page does NOT redirect the browser. When the redirect_uri
 // passes its allow-list it POSTs JSON {code,state} to that URL and expects
@@ -948,11 +948,18 @@ export function stopXiaomiMimoProxy() {
 //   2. read the code from the JSON body, not just the query string
 //   3. answer with application/json {"ok":true}
 // The exchange happens server-side and the modal polls for the result.
+//
+// The port must be its own: the dashboard already owns the app port, and two
+// listeners cannot bind the same one. Agnes' allow-list accepts any port, so a
+// dedicated fixed port is both required and permitted. 1456 sits next to the
+// Codex proxy's 1455.
 // ───────────────────────────────────────────────────────────────────────────
 
 let agnesProxyServer = null;
 let agnesProxyTimeout = null;
 const AGNES_PROXY_TIMEOUT_MS = 300000; // 5 minutes
+// Distinct from the Codex proxy (1455) and from the dashboard's own port.
+const AGNES_PORT = 1456;
 const agnesSessions = new Map();
 
 export function registerAgnesSession({ state, redirectUri }) {
@@ -1046,13 +1053,14 @@ async function handleAgnesCallback(req, res) {
     session.error = err.message;
     console.log("[agnes oauth] exchange failed:", err.message);
     return ok(false);
-  } finally {
-    // Agnes delivers at most one code per login attempt.
-    stopAgnesProxy();
   }
+  // NOTE: the server is stopped on the response's 'finish' event (see
+  // startAgnesProxy), not here. Closing it synchronously would tear down the
+  // socket before the {"ok":...} body reaches the login page, which reads as a
+  // failed delivery and leaves the browser stranded on app.agnes-ai.com.
 }
 
-export function startAgnesProxy(appPort) {
+export function startAgnesProxy() {
   return new Promise((resolve) => {
     if (agnesProxyServer) {
       resolve({ success: true });
@@ -1069,6 +1077,10 @@ export function startAgnesProxy(appPort) {
         res.end(JSON.stringify({ ok: false }));
         return;
       }
+      // Agnes delivers at most one code per login attempt, and the login page
+      // decides success by parsing this response — so the listener may only be
+      // closed once the body has actually been flushed to the socket.
+      res.on("finish", () => stopAgnesProxy());
       handleAgnesCallback(req, res).catch(() => {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: false }));
@@ -1077,16 +1089,20 @@ export function startAgnesProxy(appPort) {
 
     server.on("error", (err) => {
       console.log("[agnes oauth] listen error:", err.message);
-      resolve({ success: false, reason: err.message });
+      if (err.code === "EADDRINUSE") {
+        resolve({ success: false, reason: "port_busy" });
+      } else {
+        resolve({ success: false, reason: err.message });
+      }
     });
 
-    server.listen(Number(appPort), "127.0.0.1", () => {
+    server.listen(AGNES_PORT, "127.0.0.1", () => {
       agnesProxyServer = server;
       agnesProxyTimeout = setTimeout(() => {
         console.log("[agnes oauth] timeout, stopping");
         stopAgnesProxy();
       }, AGNES_PROXY_TIMEOUT_MS);
-      console.log(`[agnes oauth] listening on port ${appPort}/auth/callback`);
+      console.log(`[agnes oauth] listening on 127.0.0.1:${AGNES_PORT}/auth/callback`);
       resolve({ success: true });
     });
   });

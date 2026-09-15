@@ -164,16 +164,11 @@ export async function GET(request, { params }) {
       }
       if (provider === "agnes") {
         // Agnes delivers the code by POSTing to the redirect_uri instead of
-        // redirecting the browser, and it only does so for a strict
-        // 127.0.0.1:<port>/auth/callback shape. We therefore listen on the app
-        // port itself rather than a fixed helper port.
-        const appPort = searchParams.get("app_port");
-        if (!appPort) {
-          return NextResponse.json({ error: "Missing app_port" }, { status: 400 });
-        }
+        // redirecting the browser. The proxy owns its own fixed port (1456) —
+        // it cannot reuse the app port, which the dashboard already binds.
         const state = searchParams.get("state");
         const redirectUri = searchParams.get("redirect_uri");
-        const result = await startAgnesProxy(Number(appPort));
+        const result = await startAgnesProxy();
         const serverSide = result.success && state && redirectUri
           ? registerAgnesSession({ state, redirectUri })
           : false;

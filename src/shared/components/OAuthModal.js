@@ -305,8 +305,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         // Anything else makes it skip the CLI delivery branch entirely, so the
         // browser just stays on app.agnes-ai.com and no code ever comes back.
         // When the allow-list matches it POSTs {code,state} here (not a redirect)
-        // and expects {"ok":true} — handled by the agnes proxy server.
-        redirectUri = `http://127.0.0.1:${appPort}/auth/callback`;
+        // and expects {"ok":true}.
+        //
+        // Port 1456 is the proxy's own fixed listener — it deliberately is NOT
+        // the app port, which the dashboard already owns.
+        redirectUri = "http://127.0.0.1:1456/auth/callback";
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
       }
@@ -371,7 +374,6 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       if (provider === "agnes") {
         try {
           const proxyUrl = new URL(`/api/oauth/agnes/start-proxy`, window.location.origin);
-          proxyUrl.searchParams.set("app_port", appPort);
           proxyUrl.searchParams.set("state", data.state);
           proxyUrl.searchParams.set("redirect_uri", redirectUri);
           const proxyRes = await fetch(proxyUrl.toString());
@@ -379,7 +381,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           agnesProxyActive = proxyData.success;
           agnesServerSide = !!proxyData.serverSide;
           if (!agnesProxyActive && proxyData.reason === "port_busy") {
-            throw new Error(`Port ${appPort} in use; 9router must own it to receive the Agnes callback`);
+            throw new Error("Port 1456 in use; close the conflicting process and retry");
           }
         } catch (e) {
           if (e?.message && e.message.includes("Port")) throw e;
