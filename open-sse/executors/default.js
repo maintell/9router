@@ -6,6 +6,7 @@ import { OAUTH_ENDPOINTS, buildKimiHeaders } from "../config/appConstants.js";
 import { buildClineHeaders } from "../shared/clineAuth.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { refreshAgnesToken } from "../services/tokenRefresh/providers/agnesToken.js";
+import { applyCustomHeaders } from "../config/customHeaders.js";
 import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
 
@@ -209,6 +210,12 @@ export class DefaultExecutor extends BaseExecutor {
     }
 
     if (stream) headers["Accept"] = "text/event-stream";
+
+    // Applied last so a configured rule replaces anything set above. This
+    // executor builds its own headers via applyAuth() and does not call
+    // super.buildHeaders(), so the base implementation cannot cover it.
+    applyCustomHeaders(headers, this.provider);
+
     return headers;
   }
 

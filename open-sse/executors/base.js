@@ -3,6 +3,7 @@ import { shouldRefreshCredentials } from "../services/oauthCredentialManager.js"
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { dbg } from "../utils/debugLog.js";
 import { ANTHROPIC_API_VERSION, OPENAI_COMPAT_BASE, ANTHROPIC_COMPAT_BASE } from "../providers/shared.js";
+import { applyCustomHeaders } from "../config/customHeaders.js";
 import { resolveOpenAICompatibleApiType } from "../services/provider.js";
 
 /**
@@ -71,6 +72,11 @@ export class BaseExecutor {
     if (stream) {
       headers["Accept"] = "text/event-stream";
     }
+
+    // Applied last so a configured rule replaces anything set above (including
+    // Authorization). Specialised executors call super.buildHeaders(), so this
+    // covers them too.
+    applyCustomHeaders(headers, this.provider);
 
     return headers;
   }
