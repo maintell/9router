@@ -88,26 +88,40 @@ export function normalizeRules(raw) {
 // SENSITIVE_HEADER_NAMES directly, and an export with no consumer is dead code.
 
 // ───────────────────────────────────────────────────────────────────────────
-// Settings-backed cache.
+// Rules cache.
 //
-// buildHeaders() is synchronous but getSettings() is async, and executors are
-// singletons created without a config argument, so rules cannot be threaded
-// through this.config. Mirror getObservabilityConfig() in
-// src/lib/db/repos/settingsRepo.js: a synchronous read over a short-lived
-// cache, refreshed in the background.
+// buildHeaders() is synchronous but reading settings is async, and executors
+// are singletons created without a config argument, so rules cannot be
+// threaded through this.config.
+//
+// This module deliberately performs NO I/O: open-sse must not import from
+// src/lib/db, or webpack tries to bundle the SQLite driver and fails on
+// node:/bun: schemes. Instead the app layer pushes rules in via
+// setCustomHeadersProvider(); executors pull them out synchronously.
+//
+// If no provider is registered the feature is simply inert, so the engine
+// stays usable standalone.
 // ───────────────────────────────────────────────────────────────────────────
 
 let cache = { rules: {}, ts: 0 };
 let refreshing = false;
+let providerFn = null;
+
+/**
+ * Register the source of truth for rules. Called once by the app layer.
+ * `fn` is async and returns the raw customHeaders object from settings.
+ */
+export function setCustomHeadersProvider(fn) {
+  providerFn = typeof fn === "function" ? fn : null;
+}
 
 function refreshCache() {
-  if (refreshing) return;
+  if (refreshing || !providerFn) return;
   refreshing = true;
-  // Lazy import keeps open-sse free of a load-time dependency on src/.
-  import("../../src/lib/db/repos/settingsRepo.js")
-    .then(({ getSettings }) => getSettings())
-    .then((settings) => {
-      cache = { rules: normalizeRules(settings?.customHeaders), ts: Date.now() };
+  Promise.resolve()
+    .then(() => providerFn())
+    .then((raw) => {
+      cache = { rules: normalizeRules(raw), ts: Date.now() };
     })
     .catch(() => {
       /* keep serving the previous value on failure */
@@ -120,7 +134,7 @@ function refreshCache() {
 export function applyCustomHeaders(headers, provider) {
   if (!headers || !provider) return headers;
   try {
-    if (Date.now() - cache.ts > CACHE_TTL_MS) refreshCache();
+    if (providerFn && Date.now() - cache.ts > CACHE_TTL_MS) refreshCache();
     const rules = cache.rules[provider];
     if (!rules || !rules.length) return headers;
 
@@ -137,7 +151,7 @@ export function applyCustomHeaders(headers, provider) {
   return headers;
 }
 
-// Test seam: inject rules directly instead of going through the settings store.
+// Test seam: inject rules directly instead of going through a provider.
 export function __setRulesForTest(rules) {
   cache = { rules: normalizeRules(rules), ts: Date.now() };
 }

@@ -30,6 +30,21 @@ import { killAllBridges } from "@/lib/mcp/stdioSseBridge";
   try { initDbHooks(getSettings, updateSettings); } catch { /* ignore */ }
 })();
 
+// Feed per-provider custom request headers to the routing engine.
+//
+// Direction matters: open-sse must never import from src/lib/db, because
+// webpack then tries to bundle the SQLite driver and dies on node:/bun:
+// schemes. So the app layer owns the read and pushes rules in; open-sse only
+// applies them synchronously while building each request.
+(async function bootstrapCustomHeaders() {
+  try {
+    const { setCustomHeadersProvider } = await import("open-sse/config/customHeaders.js");
+    setCustomHeadersProvider(async () => (await getSettings())?.customHeaders);
+  } catch {
+    /* engine optional; the feature stays inert if this fails */
+  }
+})();
+
 process.setMaxListeners(20);
 
 // Defer heavy startup work so the first HTTP request (login → dashboard) isn't
