@@ -37,17 +37,26 @@ describe("agnes redirect_uri must miss the allow-list", () => {
     expect(agnesAllowsLoopbackPost("http://127.0.0.1:1456/auth/callback")).toBe(true);
   });
 
-  it("accepts the localhost/callback form 9router actually uses", () => {
+  it("accepts the localhost/callback form", () => {
     // "localhost" is not the literal "127.0.0.1", so the allow-list misses and
     // the page takes the redirect branch -> code lands in the URL.
     expect(agnesAllowsLoopbackPost("http://localhost:20128/callback")).toBe(false);
   });
 
-  it("redirect branch is chosen for the dashboard-style redirect_uri", () => {
-    const redirectUri = "http://localhost:20128/callback";
+  it("accepts a LAN-address form (remote dashboard access)", () => {
+    // Someone browsing http://192.168.2.2:20128 needs the redirect to come back
+    // to that host; any real hostname misses the allow-list, so this is safe.
+    expect(agnesAllowsLoopbackPost("http://192.168.2.2:20128/callback")).toBe(false);
+  });
+
+  it("redirect branch is chosen for every non-loopback dashboard host", () => {
     // The page's own decision: `i = a(redirectUri)`, then `if (i) POST else redirect`.
-    const usesPost = agnesAllowsLoopbackPost(redirectUri);
-    expect(usesPost).toBe(false);
+    // Verified against the live exchange endpoint: loopback, localhost and a LAN
+    // address all return the identical 010006 for a bogus code, i.e. the server
+    // does not validate redirect_uri at all.
+    for (const host of ["localhost:20128", "192.168.2.2:20128", "9router.example.com"]) {
+      expect(agnesAllowsLoopbackPost(`http://${host}/callback`)).toBe(false);
+    }
   });
 
   it("pathname must be exactly /auth/callback for POST mode", () => {

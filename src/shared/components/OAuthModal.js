@@ -309,11 +309,18 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         // *visitor's* machine, not the server running 9router, so the code is
         // delivered to a port nobody is listening on and the page stays put.
         //
-        // We therefore deliberately MISS the allow-list by using "localhost"
-        // (only the literal "127.0.0.1" matches) so the page takes the redirect
-        // branch and hands the code back through the URL, which /callback
-        // already handles.
-        redirectUri = `http://localhost:${appPort}/callback`;
+        // We therefore deliberately MISS the allow-list and take the redirect
+        // branch, handing the code back through the URL which /callback already
+        // handles.
+        //
+        // The host must mirror how the user actually reached the dashboard:
+        // "localhost" only works when browsing on the server itself. Someone
+        // opening http://192.168.2.2:20128 from another machine needs the
+        // redirect to come back to that same host, or the browser navigates to
+        // its own localhost and nobody is there to receive the code.
+        // Any real hostname misses the allow-list (it only matches the literal
+        // 127.0.0.1), so this still selects the redirect branch.
+        redirectUri = `http://${window.location.host}/callback`;
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
       }
