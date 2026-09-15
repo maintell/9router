@@ -299,17 +299,21 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       } else if (provider === "xai") {
         redirectUri = "http://127.0.0.1:56121/callback";
       } else if (provider === "agnes") {
-        // Agnes' login page validates redirect_uri against a strict allow-list:
-        //   protocol http: AND hostname 127.0.0.1 (NOT "localhost") AND any port
-        //   AND pathname exactly "/auth/callback" AND no query/hash.
-        // Anything else makes it skip the CLI delivery branch entirely, so the
-        // browser just stays on app.agnes-ai.com and no code ever comes back.
-        // When the allow-list matches it POSTs {code,state} here (not a redirect)
-        // and expects {"ok":true}.
+        // Agnes' login page has two delivery modes, chosen by an allow-list:
+        //   allow-list match (127.0.0.1 + /auth/callback)
+        //       -> it POSTs {code,state} to that URL and expects {"ok":true}
+        //   otherwise
+        //       -> it navigates to redirect_uri?code=...&state=...
         //
-        // Port 1456 is the proxy's own fixed listener — it deliberately is NOT
-        // the app port, which the dashboard already owns.
-        redirectUri = "http://127.0.0.1:1456/auth/callback";
+        // The POST mode is unusable from a browser: 127.0.0.1 there means the
+        // *visitor's* machine, not the server running 9router, so the code is
+        // delivered to a port nobody is listening on and the page stays put.
+        //
+        // We therefore deliberately MISS the allow-list by using "localhost"
+        // (only the literal "127.0.0.1" matches) so the page takes the redirect
+        // branch and hands the code back through the URL, which /callback
+        // already handles.
+        redirectUri = `http://localhost:${appPort}/callback`;
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
       }
@@ -366,30 +370,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         }
       }
 
-      // Agnes: proxy listens on the app port at /auth/callback. The login page
-      // POSTs the code there and expects {"ok":true}; it does not redirect the
-      // browser, so the usual popup/channel delivery never fires.
-      let agnesProxyActive = false;
-      let agnesServerSide = false;
-      if (provider === "agnes") {
-        try {
-          const proxyUrl = new URL(`/api/oauth/agnes/start-proxy`, window.location.origin);
-          proxyUrl.searchParams.set("state", data.state);
-          proxyUrl.searchParams.set("redirect_uri", redirectUri);
-          const proxyRes = await fetch(proxyUrl.toString());
-          const proxyData = await proxyRes.json();
-          agnesProxyActive = proxyData.success;
-          agnesServerSide = !!proxyData.serverSide;
-          if (!agnesProxyActive && proxyData.reason === "port_busy") {
-            throw new Error("Port 1456 in use; close the conflicting process and retry");
-          }
-        } catch (e) {
-          if (e?.message && e.message.includes("Port")) throw e;
-          agnesProxyActive = false;
-        }
-      }
-
-      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide, agnesServerSide });
+      // Agnes uses the plain popup + /callback redirect flow (see the redirectUri
+      // branch above for why the POST mode is unusable from a browser), so no
+      // start-proxy call is needed here.
+      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide });
 
       // Guard: device_code providers return authUrl:null from /authorize. Never window.open(null)
       // (browsers coerce it to the relative path ".../null").
@@ -410,14 +394,6 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           setStep("input");
         }
       } else if (provider === "xai" && xaiProxyActive) {
-        setStep("waiting");
-        popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
-        if (!popupRef.current) {
-          setStep("input");
-        }
-      } else if (provider === "agnes" && agnesProxyActive) {
-        // Agnes: login happens in the popup, the code is POSTed to our proxy,
-        // and the proxy exchanges it server-side. No channel/popup message.
         setStep("waiting");
         popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) {
@@ -490,9 +466,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       ? "codex"
       : authData?.xaiServerSide
         ? "xai"
-        : authData?.agnesServerSide
-          ? "agnes"
-          : authData?.proxyProvider
+        : authData?.proxyProvider
             ? authData.proxyProvider
             : null;
     if (!pollProvider || !authData?.state) return;
