@@ -17,6 +17,7 @@ import {
   refreshTraeToken,
   refreshZedToken,
   refreshWindsurfToken,
+  refreshAgnesToken,
   classifyOAuthRefreshError,
 } from "./tokenRefresh/providers.js";
 
@@ -161,13 +162,17 @@ const REFRESH_HANDLERS = {
   windsurf: (c, log) => refreshWindsurfToken(c, log),
   // Kimi Code OAuth (merged into id `kimi`); legacy id still routes here
   kimi: (c, log) => refreshKimiToken(c.refreshToken, c, log),
+  // Agnes renews by presenting the access_token; see oauth.accessOnly.
+  agnes: (c, log) => refreshAgnesToken(c.accessToken, log),
   "kimi-coding": (c, log) => refreshKimiToken(c.refreshToken, c, log),
   vertex: vertexRefreshHandler,
   "vertex-partner": vertexRefreshHandler
 };
 
 export async function getAccessToken(provider, credentials, log) {
-  if (!credentials || !credentials.refreshToken || typeof credentials.refreshToken !== "string") {
+  const hasRt = credentials?.refreshToken && typeof credentials.refreshToken === "string";
+  // accessOnly providers (Agnes) carry no refreshToken by design.
+  if (!credentials || (!hasRt && !isAccessOnly(provider))) {
     log?.warn?.("TOKEN_REFRESH", `No valid refresh token available for provider: ${provider}`);
     return null;
   }
@@ -187,7 +192,7 @@ async function _getAccessTokenInternal(provider, credentials, log) {
 }
 
 export async function refreshTokenByProvider(provider, credentials, log) {
-  if (!credentials.refreshToken) return null;
+  if (!credentials.refreshToken && !isAccessOnly(provider)) return null;
   const handler = REFRESH_HANDLERS[provider];
   return handler ? handler(credentials, log) : refreshAccessToken(provider, credentials.refreshToken, credentials, log);
 }
