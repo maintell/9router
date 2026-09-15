@@ -86,3 +86,58 @@ export function normalizeRules(raw) {
 
 // NOTE: no isSensitiveHeaderName() helper — the UI compares against
 // SENSITIVE_HEADER_NAMES directly, and an export with no consumer is dead code.
+
+// ───────────────────────────────────────────────────────────────────────────
+// Settings-backed cache.
+//
+// buildHeaders() is synchronous but getSettings() is async, and executors are
+// singletons created without a config argument, so rules cannot be threaded
+// through this.config. Mirror getObservabilityConfig() in
+// src/lib/db/repos/settingsRepo.js: a synchronous read over a short-lived
+// cache, refreshed in the background.
+// ───────────────────────────────────────────────────────────────────────────
+
+let cache = { rules: {}, ts: 0 };
+let refreshing = false;
+
+function refreshCache() {
+  if (refreshing) return;
+  refreshing = true;
+  // Lazy import keeps open-sse free of a load-time dependency on src/.
+  import("../../src/lib/db/repos/settingsRepo.js")
+    .then(({ getSettings }) => getSettings())
+    .then((settings) => {
+      cache = { rules: normalizeRules(settings?.customHeaders), ts: Date.now() };
+    })
+    .catch(() => {
+      /* keep serving the previous value on failure */
+    })
+    .finally(() => {
+      refreshing = false;
+    });
+}
+
+export function applyCustomHeaders(headers, provider) {
+  if (!headers || !provider) return headers;
+  try {
+    if (Date.now() - cache.ts > CACHE_TTL_MS) refreshCache();
+    const rules = cache.rules[provider];
+    if (!rules || !rules.length) return headers;
+
+    for (const rule of rules) {
+      if (rule.mode === "static") {
+        setHeaderCaseInsensitive(headers, rule.name, rule.value);
+      } else if (rule.mode === "random") {
+        setHeaderCaseInsensitive(headers, rule.name, randomAlphaNum(rule.length));
+      }
+    }
+  } catch {
+    /* never break a request because of a header rule */
+  }
+  return headers;
+}
+
+// Test seam: inject rules directly instead of going through the settings store.
+export function __setRulesForTest(rules) {
+  cache = { rules: normalizeRules(rules), ts: Date.now() };
+}

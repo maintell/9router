@@ -99,6 +99,66 @@ describe("normalizeRules", () => {
   });
 });
 
+describe("applyCustomHeaders", () => {
+  it("applies a static rule", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({ openai: [{ name: "X-Client", mode: "static", value: "9router" }] });
+    const headers = {};
+    applyCustomHeaders(headers, "openai");
+    expect(headers["X-Client"]).toBe("9router");
+  });
+
+  it("applies a random rule of the configured length", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({ openai: [{ name: "X-Session", mode: "random", length: 12 }] });
+    const headers = {};
+    applyCustomHeaders(headers, "openai");
+    expect(headers["X-Session"]).toMatch(/^[a-z0-9]{12}$/);
+  });
+
+  it("generates a new random value on each call", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({ p: [{ name: "X", mode: "random", length: 24 }] });
+    const a = {}, b = {};
+    applyCustomHeaders(a, "p");
+    applyCustomHeaders(b, "p");
+    expect(a.X).not.toBe(b.X);
+  });
+
+  it("ignores rules belonging to another provider", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({ openai: [{ name: "X-Client", mode: "static", value: "v" }] });
+    const headers = {};
+    applyCustomHeaders(headers, "agnes");
+    expect(headers["X-Client"]).toBeUndefined();
+  });
+
+  it("leaves headers untouched when there are no rules", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({});
+    const headers = { Authorization: "Bearer real" };
+    applyCustomHeaders(headers, "openai");
+    expect(headers).toEqual({ Authorization: "Bearer real" });
+  });
+
+  it("replaces an existing header without duplicating it", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({ p: [{ name: "x-trace", mode: "static", value: "new" }] });
+    const headers = { "X-Trace": "old" };
+    applyCustomHeaders(headers, "p");
+    expect(Object.keys(headers)).toHaveLength(1);
+    expect(headers["x-trace"]).toBe("new");
+  });
+
+  it("never throws — a broken rule set still yields a usable header object", async () => {
+    const { applyCustomHeaders, __setRulesForTest } = await load();
+    __setRulesForTest({ p: [{ name: "X", mode: "static", value: "v" }] });
+    const headers = { Authorization: "Bearer real" };
+    expect(() => applyCustomHeaders(headers, "p")).not.toThrow();
+    expect(headers.Authorization).toBe("Bearer real");
+  });
+});
+
 describe("SENSITIVE_HEADER_NAMES", () => {
   it("includes the auth and content headers", async () => {
     const { SENSITIVE_HEADER_NAMES } = await load();
