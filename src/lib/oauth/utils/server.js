@@ -937,3 +937,163 @@ export function stopXiaomiMimoProxy() {
   xiaomiMimoSessions.clear();
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Agnes proxy on 127.0.0.1:<appPort>/auth/callback
+//
+// Agnes' login page does NOT redirect the browser. When the redirect_uri
+// passes its allow-list it POSTs JSON {code,state} to that URL and expects
+// {"ok":true} — otherwise it reports "cliConnectFailed" and the browser stays
+// on app.agnes-ai.com with no code delivered. So this proxy must:
+//   1. accept POST (and GET, for safety) at exactly /auth/callback
+//   2. read the code from the JSON body, not just the query string
+//   3. answer with application/json {"ok":true}
+// The exchange happens server-side and the modal polls for the result.
+// ───────────────────────────────────────────────────────────────────────────
+
+let agnesProxyServer = null;
+let agnesProxyTimeout = null;
+const AGNES_PROXY_TIMEOUT_MS = 300000; // 5 minutes
+const agnesSessions = new Map();
+
+export function registerAgnesSession({ state, redirectUri }) {
+  if (!state) return false;
+  agnesSessions.set(state, {
+    redirectUri,
+    status: "pending",
+    createdAt: Date.now(),
+  });
+  return true;
+}
+
+export function getAgnesSessionStatus(state) {
+  return agnesSessions.get(state) || null;
+}
+
+export function clearAgnesSession(state) {
+  agnesSessions.delete(state);
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      // The payload is a tiny {code,state}; cap it so a hostile request
+      // cannot grow this without bound.
+      if (raw.length > 4096) req.destroy();
+    });
+    req.on("end", () => resolve(raw));
+    req.on("error", () => resolve(""));
+  });
+}
+
+async function handleAgnesCallback(req, res) {
+  const url = new URL(req.url, "http://127.0.0.1");
+  let code = url.searchParams.get("code");
+  let state = url.searchParams.get("state");
+
+  if (req.method === "POST") {
+    const raw = await readBody(req);
+    try {
+      const body = JSON.parse(raw);
+      code = body.code ?? code;
+      state = body.state ?? state;
+    } catch {
+      /* non-JSON body: fall back to query params */
+    }
+  }
+
+  const session = state ? agnesSessions.get(state) : null;
+  const ok = (session) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: session }));
+  };
+
+  if (!session) {
+    console.log("[agnes oauth] no pending session for state");
+    return ok(false);
+  }
+
+  try {
+    if (!code) throw new Error("No authorization code received");
+
+    const { exchangeTokens } = await import("../providers.js");
+    const { createProviderConnection } = await import("@/models");
+
+    const tokenData = await exchangeTokens(
+      "agnes",
+      code,
+      session.redirectUri,
+      undefined,
+      state
+    );
+    const connection = await createProviderConnection({
+      provider: "agnes",
+      authType: "oauth",
+      ...tokenData,
+      expiresAt: tokenData.expiresIn
+        ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
+        : null,
+      testStatus: "active",
+    });
+
+    session.status = "done";
+    session.connectionId = connection.id;
+    session.email = connection.email;
+    return ok(true);
+  } catch (err) {
+    session.status = "error";
+    session.error = err.message;
+    console.log("[agnes oauth] exchange failed:", err.message);
+    return ok(false);
+  } finally {
+    // Agnes delivers at most one code per login attempt.
+    stopAgnesProxy();
+  }
+}
+
+export function startAgnesProxy(appPort) {
+  return new Promise((resolve) => {
+    if (agnesProxyServer) {
+      resolve({ success: true });
+      return;
+    }
+
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url, "http://127.0.0.1");
+      // Must be exactly /auth/callback — the Agnes login page only enters its
+      // CLI delivery branch for that path, and it posts here rather than
+      // redirecting.
+      if (url.pathname !== "/auth/callback") {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false }));
+        return;
+      }
+      handleAgnesCallback(req, res).catch(() => {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false }));
+      });
+    });
+
+    server.on("error", (err) => {
+      console.log("[agnes oauth] listen error:", err.message);
+      resolve({ success: false, reason: err.message });
+    });
+
+    server.listen(Number(appPort), "127.0.0.1", () => {
+      agnesProxyServer = server;
+      agnesProxyTimeout = setTimeout(() => {
+        console.log("[agnes oauth] timeout, stopping");
+        stopAgnesProxy();
+      }, AGNES_PROXY_TIMEOUT_MS);
+      console.log(`[agnes oauth] listening on port ${appPort}/auth/callback`);
+      resolve({ success: true });
+    });
+  });
+}
+
+export function stopAgnesProxy() {
+  if (agnesProxyTimeout) { clearTimeout(agnesProxyTimeout); agnesProxyTimeout = null; }
+  if (agnesProxyServer) { agnesProxyServer.close(); agnesProxyServer = null; }
+}
+

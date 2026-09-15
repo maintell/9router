@@ -40,6 +40,11 @@ import {
   registerXiaomiMimoSession,
   getXiaomiMimoSessionStatus,
   clearXiaomiMimoSession,
+  startAgnesProxy,
+  stopAgnesProxy,
+  registerAgnesSession,
+  getAgnesSessionStatus,
+  clearAgnesSession,
 } from "@/lib/oauth/utils/server";
 import { detectIdeInstalled } from "@/lib/oauth/utils/ideDetect";
 import { ZED_HOSTED_CONFIG } from "@/lib/oauth/constants/oauth";
@@ -157,6 +162,23 @@ export async function GET(request, { params }) {
         const result = await startXiaomiMimoProxy();
         return NextResponse.json(result);
       }
+      if (provider === "agnes") {
+        // Agnes delivers the code by POSTing to the redirect_uri instead of
+        // redirecting the browser, and it only does so for a strict
+        // 127.0.0.1:<port>/auth/callback shape. We therefore listen on the app
+        // port itself rather than a fixed helper port.
+        const appPort = searchParams.get("app_port");
+        if (!appPort) {
+          return NextResponse.json({ error: "Missing app_port" }, { status: 400 });
+        }
+        const state = searchParams.get("state");
+        const redirectUri = searchParams.get("redirect_uri");
+        const result = await startAgnesProxy(Number(appPort));
+        const serverSide = result.success && state && redirectUri
+          ? registerAgnesSession({ state, redirectUri })
+          : false;
+        return NextResponse.json({ ...result, serverSide });
+      }
       if (!["codex", "xai"].includes(provider)) {
         return NextResponse.json({ error: "Proxy only supported for codex/xai/trae/windsurf/zed" }, { status: 400 });
       }
@@ -191,6 +213,7 @@ export async function GET(request, { params }) {
       else if (provider === "xai") session = getXaiSessionStatus(state);
       else if (provider === "codex") session = getCodexSessionStatus(state);
       else if (provider === "xiaomi-mimo") session = getXiaomiMimoSessionStatus(state);
+      else if (provider === "agnes") session = getAgnesSessionStatus(state);
       else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo" }, { status: 400 });
       if (!session) return NextResponse.json({ status: "unknown" });
       if (session.status === "done" || session.status === "error") {
@@ -209,6 +232,9 @@ export async function GET(request, { params }) {
         else if (provider === "windsurf") clearWindsurfSession(state);
         else if (provider === "zed") clearZedSession(state);
         else if (provider === "xai") clearXaiSession(state);
+        // Agnes exchanges server-side, so the session is terminal here.
+        // The proxy already stopped itself after the single callback.
+        else if (provider === "agnes") clearAgnesSession(state);
         else clearCodexSession(state);
         return NextResponse.json(payload);
       }

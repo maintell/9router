@@ -298,6 +298,15 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         redirectUri = "http://localhost:1455/auth/callback";
       } else if (provider === "xai") {
         redirectUri = "http://127.0.0.1:56121/callback";
+      } else if (provider === "agnes") {
+        // Agnes' login page validates redirect_uri against a strict allow-list:
+        //   protocol http: AND hostname 127.0.0.1 (NOT "localhost") AND any port
+        //   AND pathname exactly "/auth/callback" AND no query/hash.
+        // Anything else makes it skip the CLI delivery branch entirely, so the
+        // browser just stays on app.agnes-ai.com and no code ever comes back.
+        // When the allow-list matches it POSTs {code,state} here (not a redirect)
+        // and expects {"ok":true} — handled by the agnes proxy server.
+        redirectUri = `http://127.0.0.1:${appPort}/auth/callback`;
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
       }
@@ -354,7 +363,31 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         }
       }
 
-      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide });
+      // Agnes: proxy listens on the app port at /auth/callback. The login page
+      // POSTs the code there and expects {"ok":true}; it does not redirect the
+      // browser, so the usual popup/channel delivery never fires.
+      let agnesProxyActive = false;
+      let agnesServerSide = false;
+      if (provider === "agnes") {
+        try {
+          const proxyUrl = new URL(`/api/oauth/agnes/start-proxy`, window.location.origin);
+          proxyUrl.searchParams.set("app_port", appPort);
+          proxyUrl.searchParams.set("state", data.state);
+          proxyUrl.searchParams.set("redirect_uri", redirectUri);
+          const proxyRes = await fetch(proxyUrl.toString());
+          const proxyData = await proxyRes.json();
+          agnesProxyActive = proxyData.success;
+          agnesServerSide = !!proxyData.serverSide;
+          if (!agnesProxyActive && proxyData.reason === "port_busy") {
+            throw new Error(`Port ${appPort} in use; 9router must own it to receive the Agnes callback`);
+          }
+        } catch (e) {
+          if (e?.message && e.message.includes("Port")) throw e;
+          agnesProxyActive = false;
+        }
+      }
+
+      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide, agnesServerSide });
 
       // Guard: device_code providers return authUrl:null from /authorize. Never window.open(null)
       // (browsers coerce it to the relative path ".../null").
@@ -375,6 +408,14 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           setStep("input");
         }
       } else if (provider === "xai" && xaiProxyActive) {
+        setStep("waiting");
+        popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
+        if (!popupRef.current) {
+          setStep("input");
+        }
+      } else if (provider === "agnes" && agnesProxyActive) {
+        // Agnes: login happens in the popup, the code is POSTed to our proxy,
+        // and the proxy exchanges it server-side. No channel/popup message.
         setStep("waiting");
         popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) {
@@ -447,9 +488,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       ? "codex"
       : authData?.xaiServerSide
         ? "xai"
-        : authData?.proxyProvider
-          ? authData.proxyProvider
-          : null;
+        : authData?.agnesServerSide
+          ? "agnes"
+          : authData?.proxyProvider
+            ? authData.proxyProvider
+            : null;
     if (!pollProvider || !authData?.state) return;
     if (callbackProcessedRef.current) return;
     let cancelled = false;
