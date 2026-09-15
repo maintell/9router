@@ -17,6 +17,7 @@ import { getProviderCustomModelRows } from "@/shared/utils/providerCustomModels"
 import ModelRow from "./ModelRow";
 import PassthroughModelsSection from "./PassthroughModelsSection";
 import CompatibleModelsSection from "./CompatibleModelsSection";
+import CustomHeadersSection from "./CustomHeadersSection";
 import ConnectionRow from "./ConnectionRow";
 import AddApiKeyModal from "./AddApiKeyModal";
 import EditCompatibleNodeModal from "./EditCompatibleNodeModal";
@@ -1769,6 +1770,8 @@ export default function ProviderDetailPage() {
         )}
         {renderModelsSection()}
       </Card>
+
+      <CustomHeadersSection providerId={providerId} />
 
       {bulkActionModal}
 
