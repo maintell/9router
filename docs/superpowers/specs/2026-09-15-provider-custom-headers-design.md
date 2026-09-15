@@ -86,22 +86,54 @@ connection would duplicate the same rules on every account.
 
 ## 4. Injection
 
-### 4.1 Location
+### 4.1 Location — `base.execute()`, not `buildHeaders()`
 
-`open-sse/executors/base.js`, `buildHeaders()` (lines 46–76) — the shared entry
-point used by every executor, including the special-cased ones that override it
-and call `super.buildHeaders(...)` (`codex.js:213`, `grok-cli.js:363`,
-`iflow.js:43`, `kiro.js:235`, …). Rules are appended **after** the existing
-logic so that "replace" semantics win over the built-in `Authorization` /
-`Content-Type` values.
+Rules are applied in `open-sse/executors/base.js` **inside `execute()`**, right
+after the `this.buildHeaders(...)` call (line 139), not at the end of
+`buildHeaders()` itself.
 
-Because the overrides delegate to `super.buildHeaders()`, changing the base
-implementation covers them too — no per-executor edits are needed.
+This distinction matters and was corrected during implementation:
 
-One caveat discovered while verifying: `...this.config.headers` on line 49 is
+- `buildHeaders()` is overridden by many executors, and most of them **never
+  call `super.buildHeaders()`**. A hook at the end of the base implementation
+  is therefore bypassed for every one of them.
+- `execute()` calls `this.buildHeaders(...)` via dynamic dispatch, so applying
+  rules immediately after that call covers every executor routed through
+  `base.execute`, regardless of how it builds its headers.
+
+This also means `DefaultExecutor` needs no change even though it constructs
+headers itself through `applyAuth()` — it does not override `execute()`.
+
+Because the call sits inside the retry/fallback loop, a random value is
+regenerated per attempt, which is what "per request" requires.
+
+Along with the executors that call `super.buildHeaders()` (`codex.js:213`,
+`grok-cli.js:363`, `opencode-go.js:142`, `xiaomi-mimo.js:51`), this covers the
+ones that override `buildHeaders` without calling super
+(`commandcode`, `kiro`, `devin-cli`, `azure`, `github`, `gemini-cli`, `cursor`,
+`iflow`, `antigravity`, `mimo-free`, `opencode`, `trae`, `windsurf`, `vertex`).
+
+One caveat discovered while verifying: `...this.config.headers` (line 49) is
 effectively a no-op on the request path, because executors are singletons built
 without a config argument (see 4.5). That existing line is left untouched; the
 custom rules do not depend on it.
+
+#### Not covered
+
+Four executors build headers inside their own `execute()` without ever calling
+`buildHeaders`, so they are out of reach of a single hook:
+
+| Executor | Header built at | Notes |
+|---|---|---|
+| `grok-web` | line 263 | web-cookie scraping upstream |
+| `perplexity-web` | line 435 | web-cookie scraping upstream |
+| `qoder` | line 646 | own execute |
+| `zed` | — | hidden provider |
+
+Covering them means editing each one individually. They were left out
+deliberately: their headers are tightly coupled to session cookies and
+fingerprint handling, so inserting arbitrary values is more likely to break
+them than to help. Revisit only if a concrete need appears.
 
 ### 4.2 Ordering
 
