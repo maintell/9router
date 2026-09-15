@@ -299,32 +299,34 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       } else if (provider === "xai") {
         redirectUri = "http://127.0.0.1:56121/callback";
       } else if (provider === "agnes") {
-        // Agnes' login page has two delivery modes, chosen by an allow-list:
-        //   allow-list match (127.0.0.1 + /auth/callback)
-        //       -> it POSTs {code,state} to that URL and expects {"ok":true}
-        //   otherwise
-        //       -> it navigates to redirect_uri?code=...&state=...
+        // Agnes only returns an authorization code when redirect_uri passes its
+        // allow-list. On login success the page does:
         //
-        // The POST mode is unusable from a browser: 127.0.0.1 there means the
-        // *visitor's* machine, not the server running 9router, so the code is
-        // delivered to a port nobody is listening on and the page stays put.
+        //   if (isDeepLinkMode) { generate code and POST it to redirect_uri }
+        //   else                { push("/") }   // plain web login, no code ever
         //
-        // Delivery only happens when the allow-list MATCHES. When it misses,
-        // the login page logs the user in and navigates home — it does not
-        // redirect with ?code= at all. So the redirect branch I assumed exists
-        // does not; we must satisfy the allow-list.
+        // There is no "redirect back with ?code=" fallback — missing the
+        // allow-list just lands the user on the Agnes home page.
         //
-        // The allow-list is: protocol http:, hostname "127.0.0.1" (literal —
-        // "localhost" does NOT match), any port, pathname exactly
+        // The allow-list is: protocol http:, hostname the literal "127.0.0.1"
+        // ("localhost" does NOT match), any port, pathname exactly
         // "/auth/callback", and no query/hash.
         //
-        // The host comes from the address bar so it works both when browsing on
-        // the server and through an SSH tunnel that forwards the dashboard port:
-        // in both cases the host is a loopback address and the browser's POST
-        // reaches us. Accessing the dashboard over a LAN IP cannot work — the
-        // browser would POST to its own 127.0.0.1, where nothing listens. That
-        // is an Agnes constraint; AgnesCode's own desktop client behaves the
-        // same way.
+        // Because the browser resolves 127.0.0.1 on its own machine, the POST
+        // only reaches 9router when the dashboard itself is opened over a
+        // loopback address: browsing on the server, or an SSH tunnel forwarding
+        // the dashboard port. Reject anything else up front instead of letting
+        // the user sign in and silently get nothing back.
+        const host = window.location.hostname;
+        if (host !== "127.0.0.1" && host !== "[::1]") {
+          throw new Error(
+            "Agnes login requires opening the dashboard over 127.0.0.1 — " +
+              "Agnes sends the code back to the browser's own loopback address, " +
+              "so it never arrives when the dashboard is opened at " +
+              `${window.location.host}. Browse on the server itself, or forward ` +
+              `the port with: ssh -L ${window.location.port || 20128}:127.0.0.1:${window.location.port || 20128} <server>`
+          );
+        }
         redirectUri = `http://${window.location.host}/auth/callback`;
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
