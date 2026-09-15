@@ -43,6 +43,7 @@ import {
 } from "@/lib/oauth/utils/server";
 import { detectIdeInstalled } from "@/lib/oauth/utils/ideDetect";
 import { ZED_HOSTED_CONFIG } from "@/lib/oauth/constants/oauth";
+import { registerAgnesSession, getAgnesSessionStatus, clearAgnesSession } from "@/lib/oauth/agnesSessions";
 
 async function completeXaiManualCode(code, state) {
   const session = state ? getXaiSessionStatus(state) : null;
@@ -133,6 +134,11 @@ export async function GET(request, { params }) {
         try { const p = new URL(redirectUri).port; if (p) meta.nativeAppPort = p; } catch { /* ignore */ }
       }
       const authData = await generateAuthData(provider, redirectUri, Object.keys(meta).length ? meta : undefined);
+      // Agnes: the code arrives later via POST /auth/callback, so remember the
+      // attempt under its state. The modal polls for the outcome.
+      if (provider === "agnes" && authData?.state) {
+        registerAgnesSession({ state: authData.state, redirectUri });
+      }
       return NextResponse.json(authData);
     }
 
@@ -191,7 +197,8 @@ export async function GET(request, { params }) {
       else if (provider === "xai") session = getXaiSessionStatus(state);
       else if (provider === "codex") session = getCodexSessionStatus(state);
       else if (provider === "xiaomi-mimo") session = getXiaomiMimoSessionStatus(state);
-      else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo" }, { status: 400 });
+      else if (provider === "agnes") session = getAgnesSessionStatus(state);
+      else return NextResponse.json({ error: "Poll only supported for codex/xai/trae/windsurf/zed/xiaomi-mimo/agnes" }, { status: 400 });
       if (!session) return NextResponse.json({ status: "unknown" });
       if (session.status === "done" || session.status === "error") {
         const payload = { ...session };
@@ -209,6 +216,9 @@ export async function GET(request, { params }) {
         else if (provider === "windsurf") clearWindsurfSession(state);
         else if (provider === "zed") clearZedSession(state);
         else if (provider === "xai") clearXaiSession(state);
+        // Agnes exchanges server-side in /auth/callback, so the attempt is
+        // terminal by the time we are polled for it.
+        else if (provider === "agnes") clearAgnesSession(state);
         else clearCodexSession(state);
         return NextResponse.json(payload);
       }

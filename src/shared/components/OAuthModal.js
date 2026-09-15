@@ -309,18 +309,23 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         // *visitor's* machine, not the server running 9router, so the code is
         // delivered to a port nobody is listening on and the page stays put.
         //
-        // We therefore deliberately MISS the allow-list and take the redirect
-        // branch, handing the code back through the URL which /callback already
-        // handles.
+        // Delivery only happens when the allow-list MATCHES. When it misses,
+        // the login page logs the user in and navigates home — it does not
+        // redirect with ?code= at all. So the redirect branch I assumed exists
+        // does not; we must satisfy the allow-list.
         //
-        // The host must mirror how the user actually reached the dashboard:
-        // "localhost" only works when browsing on the server itself. Someone
-        // opening http://192.168.2.2:20128 from another machine needs the
-        // redirect to come back to that same host, or the browser navigates to
-        // its own localhost and nobody is there to receive the code.
-        // Any real hostname misses the allow-list (it only matches the literal
-        // 127.0.0.1), so this still selects the redirect branch.
-        redirectUri = `http://${window.location.host}/callback`;
+        // The allow-list is: protocol http:, hostname "127.0.0.1" (literal —
+        // "localhost" does NOT match), any port, pathname exactly
+        // "/auth/callback", and no query/hash.
+        //
+        // The host comes from the address bar so it works both when browsing on
+        // the server and through an SSH tunnel that forwards the dashboard port:
+        // in both cases the host is a loopback address and the browser's POST
+        // reaches us. Accessing the dashboard over a LAN IP cannot work — the
+        // browser would POST to its own 127.0.0.1, where nothing listens. That
+        // is an Agnes constraint; AgnesCode's own desktop client behaves the
+        // same way.
+        redirectUri = `http://${window.location.host}/auth/callback`;
       } else {
         redirectUri = `http://localhost:${appPort}/callback`;
       }
@@ -377,10 +382,9 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         }
       }
 
-      // Agnes uses the plain popup + /callback redirect flow (see the redirectUri
-      // branch above for why the POST mode is unusable from a browser), so no
-      // start-proxy call is needed here.
-      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide });
+      // Agnes: the code is POSTed to /auth/callback by the login page, so the
+      // popup never receives a message. Poll for the server-side outcome.
+      setAuthData({ ...data, redirectUri, codexServerSide, xaiServerSide, proxyProvider: provider === "agnes" ? "agnes" : undefined });
 
       // Guard: device_code providers return authUrl:null from /authorize. Never window.open(null)
       // (browsers coerce it to the relative path ".../null").
@@ -401,6 +405,16 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
           setStep("input");
         }
       } else if (provider === "xai" && xaiProxyActive) {
+        setStep("waiting");
+        popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
+        if (!popupRef.current) {
+          setStep("input");
+        }
+      } else if (provider === "agnes") {
+        // The login page POSTs the code to /auth/callback; the server exchanges
+        // it and the polling effect below reports the outcome. Always popup,
+        // even when the dashboard is not on localhost — the POST comes from the
+        // popup's own page, not from this window.
         setStep("waiting");
         popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) {
