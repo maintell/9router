@@ -38,6 +38,11 @@ export const QODER_CONFIG = { ...PROVIDER_OAUTH["qoder"] };
 // iFlow OAuth Configuration (Authorization Code)
 export const IFLOW_CONFIG = { ...PROVIDER_OAUTH["iflow"] };
 
+// Agnes OAuth Configuration (Authorization Code, private variant).
+// Agnes issues only an access_token (24h) and renews it by presenting it —
+// see oauth.accessOnly. Endpoints are JSON, not form-encoded.
+export const AGNES_CONFIG = { ...PROVIDER_OAUTH["agnes"] };
+
 // Antigravity OAuth Configuration (Standard OAuth2 with Google)
 // clientId/clientSecret from ANTIGRAVITY_OAUTH_CLIENT (shared.js) — not stored in registry
 // loadCodeAssistClientMetadata is dynamic (runtime platform detection)
