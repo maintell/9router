@@ -255,23 +255,32 @@ additive and must never break existing traffic.
 
 ---
 
-## 7. Open item: overriding security-sensitive headers
+## 7. Overriding security-sensitive headers
 
 Because the rule is "configured value replaces the existing one", a user can
 configure `Authorization` or `Content-Type` and thereby replace the real
 credential, producing upstream 401s that look like a provider outage.
 
-Recommended resolution: **allow it, but warn in the UI** when a rule targets
-`authorization`, `content-type`, `accept`, or `anthropic-version`. The setting is
-explicit and the user may have a real reason (for example a provider that
-expects a non-standard auth header).
+**Decision: allow it, but warn in the UI.** The setting is explicit and the user
+may have a legitimate reason — for example a provider that expects a
+non-standard auth header, or a proxy that injects its own credentials.
 
-Alternatives considered:
+Implementation:
+
+- A shared list of sensitive names, matched case-insensitively:
+  `authorization`, `content-type`, `accept`, `anthropic-version`,
+  `x-api-key`, `api-key`.
+- The settings API returns the list (or the UI imports the same constant) so the
+  warning is not duplicated in two places.
+- When a rule targets one of them, the provider page renders a warning next to
+  that rule: that it replaces the value 9router would otherwise send, and that a
+  wrong value causes upstream 401s.
+- Nothing is blocked — the request is still sent with the user's value.
+
+Alternatives considered and rejected:
 
 - Block those names outright — safer, but silently ignores explicit intent.
 - Allow with no warning — simplest, but the failure mode is confusing.
-
-**This needs confirmation before implementation.**
 
 ---
 
