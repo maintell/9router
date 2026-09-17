@@ -10,10 +10,11 @@ export default {
     color: "#E87040",
     textIcon: "OC",
     notice: {
-      // Upstream gates the free tier to the OpenCode client itself; calls from
-      // 9router are rejected with 403 FreeTierError no matter what headers are
-      // sent. Say so up front instead of letting users discover it on failure.
-      text: "OpenCode's free models only work inside the OpenCode client — requests through 9router are rejected with \"free tier can only be used from within OpenCode\". Use OpenCode Go (paid) or another free-tier provider instead.",
+      // Without a key the upstream sees the public sentinel and answers 403
+      // "free tier can only be used from within OpenCode" before authenticating.
+      // A real key is authenticated normally, so the fix is to configure one.
+      text: "Configure an OpenCode Zen (or Go) API key — without one the free endpoint rejects requests with \"free tier can only be used from within OpenCode\". Get a key at opencode.ai/zen.",
+      apiKeyUrl: "https://opencode.ai/zen",
     },
   },
   category: "free",

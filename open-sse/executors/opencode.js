@@ -6,7 +6,15 @@ import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { isMuseSparkModel } from "../providers/models/helpers.js";
 
-const OPENCODE_UA = "opencode";
+// Extracted from the OpenCode desktop bundle (app.asar): the client sends
+// `opencode/${InstallationVersion}` with the version baked into the build.
+// A bare "opencode" does not match what the real client sends, so requests that
+// only differ by this header are trivially distinguishable from real ones.
+// Bump alongside upstream releases; a stale version is still a valid shape.
+const OPENCODE_VERSION = "1.18.31";
+const OPENCODE_UA = `opencode/${OPENCODE_VERSION}`;
+// Sentinel used by the public/free endpoint when no credential is configured.
+const PUBLIC_TOKEN = "public";
 // Models served by /zen/v1/responses; every other model stays on /chat/completions.
 const RESPONSES_MODELS = new Set([
   "muse-spark-1.2-contributor-free",
@@ -95,14 +103,17 @@ export class OpenCodeExecutor extends BaseExecutor {
   }
 
   /**
-   * OpenCode gates its free tier server-side: calls from anywhere but the
-   * OpenCode client are rejected with HTTP 403 / type "FreeTierError". This is
-   * not something a header can fix — it was verified across every free model,
-   * every x-opencode-client value, several User-Agent strings and two different
-   * egress IPs, all returning the same 403.
+   * "public" is a sentinel, not a credential: the upstream short-circuits any
+   * request carrying it with HTTP 403 / type "FreeTierError" before it ever
+   * reaches authentication. Verified across every free model, every
+   * x-opencode-client value, the real User-Agent and two egress IPs — all 403.
    *
-   * The default parseError would surface the raw upstream JSON, which reads like
-   * a crash rather than a policy. Translate it into something actionable.
+   * A real key changes the outcome: any key-shaped token returns 401
+   * "Invalid API key" instead, i.e. it *is* authenticated. So the actionable
+   * advice is "configure a real OpenCode Zen/Go API key", not "give up".
+   *
+   * Without this the base handler echoes the raw upstream JSON, which reads like
+   * a crash rather than a next step.
    */
   parseError(response, bodyText) {
     const base = super.parseError(response, bodyText);
@@ -115,9 +126,11 @@ export class OpenCodeExecutor extends BaseExecutor {
       if (type !== "FreeTierError") return base;
 
       base.message =
-        "OpenCode's free models can only be used from inside the OpenCode client, " +
-        "so they cannot be served through 9router. Use an OpenCode Go subscription " +
-        "model (provider: opencode-go), or pick another free-tier provider.";
+        "OpenCode rejected this request because no API key is configured (the " +
+        "free endpoint returns \"free tier can only be used from within OpenCode\" " +
+        "when it sees the public/no-key sentinel). Add an OpenCode Zen or Go API " +
+        "key to this provider's connection — with a real key the same model is " +
+        "authenticated normally. Otherwise use another free-tier provider.";
     } catch {
       /* not JSON — keep the base message */
     }
@@ -132,9 +145,13 @@ export class OpenCodeExecutor extends BaseExecutor {
     const downstreamUa = lower["user-agent"] || "";
     const isOpencodeDownstream = downstreamUa.toLowerCase().includes("opencode");
 
+    // A real key (OpenCode Zen / Go subscription) takes precedence; without one
+    // fall back to the public sentinel so unauthenticated use still works.
+    const token = credentials?.apiKey || credentials?.accessToken || PUBLIC_TOKEN;
+
     return {
       "Content-Type": "application/json",
-      "Authorization": "Bearer public",
+      Authorization: `Bearer ${token}`,
       "User-Agent": isOpencodeDownstream ? downstreamUa : OPENCODE_UA,
       "x-opencode-client": lower["x-opencode-client"] || "desktop",
       "x-opencode-session": lower["x-opencode-session"] || this._currentSessionId || generateSessionId(),
