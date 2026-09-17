@@ -94,6 +94,36 @@ export class OpenCodeExecutor extends BaseExecutor {
       : `${base}/zen/v1/chat/completions`;
   }
 
+  /**
+   * OpenCode gates its free tier server-side: calls from anywhere but the
+   * OpenCode client are rejected with HTTP 403 / type "FreeTierError". This is
+   * not something a header can fix — it was verified across every free model,
+   * every x-opencode-client value, several User-Agent strings and two different
+   * egress IPs, all returning the same 403.
+   *
+   * The default parseError would surface the raw upstream JSON, which reads like
+   * a crash rather than a policy. Translate it into something actionable.
+   */
+  parseError(response, bodyText) {
+    const base = super.parseError(response, bodyText);
+    if (!bodyText || typeof bodyText !== "string") return base;
+
+    try {
+      const parsed = JSON.parse(bodyText);
+      const inner = parsed?.error;
+      const type = inner?.type || parsed?.type;
+      if (type !== "FreeTierError") return base;
+
+      base.message =
+        "OpenCode's free models can only be used from inside the OpenCode client, " +
+        "so they cannot be served through 9router. Use an OpenCode Go subscription " +
+        "model (provider: opencode-go), or pick another free-tier provider.";
+    } catch {
+      /* not JSON — keep the base message */
+    }
+    return base;
+  }
+
   buildHeaders(credentials, stream = true) {
     const raw = credentials?.rawHeaders || {};
     const lower = {};
