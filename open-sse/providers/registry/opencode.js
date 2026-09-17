@@ -19,6 +19,9 @@ export default {
   },
   category: "free",
   noAuth: true,
+  // The free endpoint works without credentials, but a Zen/Go key is accepted
+  // too — so keep the Connections card (and its key field) available.
+  authModes: ["apikey"],
   transport: {
     baseUrl: "https://opencode.ai",
     headers: {

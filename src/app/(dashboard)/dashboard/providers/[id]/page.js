@@ -152,7 +152,10 @@ export default function ProviderDetailPage() {
   const authModes = providerInfo?.authModes || [];
   const isOAuth = !!OAUTH_PROVIDERS[providerId] || !!FREE_PROVIDERS[providerId] || authModes.includes("oauth");
   const supportsApiKeyAuth = !!APIKEY_PROVIDERS[providerId] || authModes.includes("apikey");
-  const isFreeNoAuth = !!FREE_PROVIDERS[providerId]?.noAuth;
+  // A noAuth provider still shows the normal Connections card when it can also
+  // take a key (OpenCode does: the free endpoint works anonymously, but a Zen/Go
+  // key unlocks more). Only hide it when there is nothing to configure.
+  const isFreeNoAuth = !!FREE_PROVIDERS[providerId]?.noAuth && !supportsApiKeyAuth;
   const staticModels = getModelsByProviderId(providerId);
   const models = providerId === "cursor" && liveModels.length > 0
     ? liveModels
