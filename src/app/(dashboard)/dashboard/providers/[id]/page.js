@@ -152,10 +152,12 @@ export default function ProviderDetailPage() {
   const authModes = providerInfo?.authModes || [];
   const isOAuth = !!OAUTH_PROVIDERS[providerId] || !!FREE_PROVIDERS[providerId] || authModes.includes("oauth");
   const supportsApiKeyAuth = !!APIKEY_PROVIDERS[providerId] || authModes.includes("apikey");
-  // A noAuth provider still shows the normal Connections card when it can also
-  // take a key (OpenCode does: the free endpoint works anonymously, but a Zen/Go
-  // key unlocks more). Only hide it when there is nothing to configure.
-  const isFreeNoAuth = !!FREE_PROVIDERS[providerId]?.noAuth && !supportsApiKeyAuth;
+  const isNoAuthProvider = !!providerInfo?.noAuth;
+  // Hide the Connections card only when there is genuinely nothing to configure
+  // (a noAuth provider with no key mode). Providers that accept a key as well
+  // — OpenCode, whose free endpoint is anonymous but accepts Zen/Go keys — keep
+  // both the Connections card and the noAuth proxy card.
+  const isFreeNoAuth = isNoAuthProvider && !supportsApiKeyAuth;
   const staticModels = getModelsByProviderId(providerId);
   const models = providerId === "cursor" && liveModels.length > 0
     ? liveModels
@@ -1490,10 +1492,10 @@ export default function ProviderDetailPage() {
         </Card>
       )}
 
-      {/* Connections */}
-      {isFreeNoAuth ? (
-        <NoAuthProxyCard providerId={providerId} />
-      ) : (
+      {/* Connections — always rendered, including for noAuth providers that
+          can also take a key (OpenCode). The noAuth-only proxy card is added
+          separately below so nothing is lost by showing this one. */}
+      {!isFreeNoAuth && (
         <Card>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold">Connections</h2>
@@ -1773,6 +1775,11 @@ export default function ProviderDetailPage() {
         )}
         {renderModelsSection()}
       </Card>
+
+      {/* Proxy pool / rotation for providers that run without credentials.
+          Kept alongside Connections so a noAuth provider that also accepts a
+          key (OpenCode) still exposes its proxy configuration. */}
+      {isNoAuthProvider && <NoAuthProxyCard providerId={providerId} />}
 
       <CustomHeadersSection providerId={providerId} />
 
