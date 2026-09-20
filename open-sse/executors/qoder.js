@@ -694,6 +694,27 @@ export class QoderExecutor extends BaseExecutor {
 
 export default QoderExecutor;
 
+/**
+ * QoderCnExecutor — the China deployment (qoderclicn).
+ *
+ * Same protocol and COSY signing as the international QoderExecutor; only the
+ * hosts differ (gateway.qoder.com.cn / openapi.qoder.com.cn). The provider id
+ * is stamped onto the credentials so every downstream helper
+ * (qoderInferenceBase, resolveQoderCredentials, fetchQoderCatalogRaw) selects
+ * the CN endpoints without any other branching.
+ */
+export class QoderCnExecutor extends QoderExecutor {
+  constructor() {
+    super();
+    this.provider = "qoder-cn";
+  }
+
+  async execute({ model, body, stream, credentials, signal, log, proxyOptions = null }) {
+    const tagged = { ...(credentials || {}), provider: "qoder-cn" };
+    return super.execute({ model, body, stream, credentials: tagged, signal, log, proxyOptions });
+  }
+}
+
 // Internals exposed for unit tests. Not part of the public API — callers
 // should import QoderExecutor and use its public methods.
 export const __test__ = {

@@ -27,6 +27,10 @@ import {
   QODER_CHAT_BASE_ALT,
   QODER_JOB_TOKEN_EXCHANGE_URL,
   QODER_USERINFO_URL,
+  QODER_CN_JOB_TOKEN_EXCHANGE_URL,
+  QODER_CN_USERINFO_URL,
+  QODER_CN_MODEL_LIST_URL,
+  QODER_CN_GATEWAY_BASE,
   QODER_IDE_VERSION,
   QODER_CLIENT_TYPE,
 } from "../shared/qoder/constants.js";
@@ -62,10 +66,13 @@ const inflight = new Map();
 /**
  * Exchange a Qoder PAT (pt-...) for a short-lived job token (jt-...).
  * This endpoint is plain JSON POST — NOT COSY-signed.
+ *
+ * Pass `exchangeUrl` to target the China deployment; it defaults to the
+ * international host so existing callers are unaffected.
  */
-async function exchangeJobToken(pat, proxyOptions = null, signal = null) {
+async function exchangeJobToken(pat, proxyOptions = null, signal = null, exchangeUrl = QODER_JOB_TOKEN_EXCHANGE_URL) {
   const res = await proxyAwareFetch(
-    QODER_JOB_TOKEN_EXCHANGE_URL,
+    exchangeUrl,
     {
       method: "POST",
       headers: {
@@ -101,10 +108,10 @@ async function exchangeJobToken(pat, proxyOptions = null, signal = null) {
  * Resolve the Qoder userId for a job token (needed for COSY signing).
  * Returns "" on any failure — callers fall back to the stored userId.
  */
-async function fetchUserIdForJobToken(jobToken, proxyOptions = null, signal = null) {
+async function fetchUserIdForJobToken(jobToken, proxyOptions = null, signal = null, userInfoUrl = QODER_USERINFO_URL) {
   try {
     const res = await proxyAwareFetch(
-      QODER_USERINFO_URL,
+      userInfoUrl,
       {
         method: "GET",
         headers: {
@@ -126,15 +133,19 @@ async function fetchUserIdForJobToken(jobToken, proxyOptions = null, signal = nu
 
 /**
  * Resolve a PAT to a job-token credential, cached per-PAT.
+ *
+ * The cache key includes the exchange endpoint so the same PAT string used
+ * against different deployments (international vs China) cannot collide.
  */
-async function resolvePatCredential(pat, proxyOptions = null, signal = null) {
-  const cached = patJobCache.get(pat);
+async function resolvePatCredential(pat, proxyOptions = null, signal = null, exchangeUrl = QODER_JOB_TOKEN_EXCHANGE_URL, userInfoUrl = QODER_USERINFO_URL) {
+  const cacheKey = `${exchangeUrl}\0${pat}`;
+  const cached = patJobCache.get(cacheKey);
   if (cached && cached.expiresAt - Date.now() > PAT_REFRESH_BUFFER_MS) return cached;
 
-  const { jobToken, expiresAt } = await exchangeJobToken(pat, proxyOptions, signal);
-  const userId = await fetchUserIdForJobToken(jobToken, proxyOptions, signal);
+  const { jobToken, expiresAt } = await exchangeJobToken(pat, proxyOptions, signal, exchangeUrl);
+  const userId = await fetchUserIdForJobToken(jobToken, proxyOptions, signal, userInfoUrl);
   const resolved = { accessToken: jobToken, userId, expiresAt };
-  patJobCache.set(pat, resolved);
+  patJobCache.set(cacheKey, resolved);
   return resolved;
 }
 
@@ -142,11 +153,22 @@ async function resolvePatCredential(pat, proxyOptions = null, signal = null) {
  * Resolve connection credentials to COSY-signable form:
  *   - PAT (pt-...) connections → exchanged to a job token (jt-...) + userId
  *   - everything else → passed through unchanged
+ *
+ * Pass `provider` ("qoder-cn" for the China deployment) to use the CN
+ * endpoints; it defaults to the international hosts so existing callers are
+ * unaffected.
  */
-export async function resolveQoderCredentials(credentials, proxyOptions = null, signal = null) {
+export async function resolveQoderCredentials(credentials, proxyOptions = null, signal = null, provider = null) {
   const raw = credentials?.apiKey || credentials?.accessToken;
   if (isQoderPat(raw)) {
-    const resolved = await resolvePatCredential(raw, proxyOptions, signal);
+    const isCn = provider === "qoder-cn" || credentials?.provider === "qoder-cn";
+    const resolved = await resolvePatCredential(
+      raw,
+      proxyOptions,
+      signal,
+      isCn ? QODER_CN_JOB_TOKEN_EXCHANGE_URL : QODER_JOB_TOKEN_EXCHANGE_URL,
+      isCn ? QODER_CN_USERINFO_URL : QODER_USERINFO_URL,
+    );
     return {
       ...credentials,
       accessToken: resolved.accessToken,
@@ -196,11 +218,17 @@ async function fetchQoderCatalogRaw(credentials, signal, proxyOptions = null) {
   const creds = cosyCredsFromConnection(credentials);
   if (!creds.userId || !creds.authToken) return null;
 
-  // Job-token traffic is rejected by api3 ("Login expired" 403) — the
-  // official qodercli serves it from api2 instead.
-  const modelListUrl = String(creds.authToken).startsWith("jt-")
-    ? `${QODER_CHAT_BASE_ALT}/algo/api/v2/model/list`
-    : QODER_MODEL_LIST_URL;
+  let modelListUrl;
+  if (credentials?.provider === "qoder-cn") {
+    // The CN gateway serves both job-token and device-token catalog traffic.
+    modelListUrl = QODER_CN_MODEL_LIST_URL;
+  } else if (String(creds.authToken).startsWith("jt-")) {
+    // Job-token traffic is rejected by api3 ("Login expired" 403) — the
+    // official qodercli serves it from api2 instead.
+    modelListUrl = `${QODER_CHAT_BASE_ALT}/algo/api/v2/model/list`;
+  } else {
+    modelListUrl = QODER_MODEL_LIST_URL;
+  }
 
   const headers = {
     Accept: "application/json",

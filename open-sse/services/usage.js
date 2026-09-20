@@ -46,6 +46,16 @@ const USAGE_HANDLERS = {
     const resolved = await resolveQoderCredentials(c, c.proxyOptions).catch(() => null);
     return getQoderUsage(resolved?.accessToken || c.accessToken, c.proxyOptions);
   },
+  "qoder-cn": async (c) => {
+    // Same as qoder, but the PAT exchange targets the CN openapi host.
+    const resolved = await resolveQoderCredentials(
+      { ...c, provider: "qoder-cn" },
+      c.proxyOptions,
+      null,
+      "qoder-cn"
+    ).catch(() => null);
+    return getQoderUsage(resolved?.accessToken || c.accessToken, c.proxyOptions, "qoder-cn");
+  },
   iflow: (c) => getIflowUsage(c.accessToken),
   ollama: (c) => getOllamaUsage(c.apiKey, c.providerSpecificData, c.proxyOptions),
   glm: (c) => getGlmUsage(c.apiKey, c.provider, c.proxyOptions),

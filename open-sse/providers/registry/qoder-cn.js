@@ -1,0 +1,50 @@
+export default {
+  id: "qoder-cn",
+  priority: 31,
+  alias: "qdc",
+  uiAlias: "qdc",
+  display: {
+    name: "Qoder CN",
+    icon: "water_drop",
+    color: "#0EA5E9",
+    website: "https://qoder.com.cn",
+    notice: {
+      signupUrl: "https://qoder.com.cn",
+    },
+  },
+  category: "oauth",
+  authModes: ["oauth", "apikey"],
+  hasOAuth: true,
+  authHint: "Personal Access Token (pt-...) from Qoder CN",
+  transport: {
+    baseUrl: "https://gateway.qoder.com.cn/algo/api/v2/service/pro/sse/agent_chat_generation",
+    headers: {},
+    timeoutMs: 120000,
+    stallTimeoutMs: 120000,
+    usage: {
+      url: "https://openapi.qoder.com.cn/api/v2/quota/usage",
+    },
+  },
+  models: [
+    { id: "qfmodel", name: "Qwen3.8-Flash" },
+    { id: "qmodel_38max", name: "Qwen3.8-Max" },
+    { id: "auto", name: "Auto" },
+    { id: "ultimate", name: "Ultimate" },
+    { id: "performance", name: "Performance" },
+    { id: "efficient", name: "Efficient" },
+    { id: "lite", name: "Lite" },
+  ],
+  oauth: {
+    openApiBaseUrl: "https://openapi.qoder.com.cn",
+    chatBaseUrl: "https://gateway.qoder.com.cn",
+    deviceTokenUrl: "https://openapi.qoder.com.cn/api/v1/deviceToken/poll",
+    refreshUrl: "https://openapi.qoder.com.cn/api/v3/user/refresh_token",
+    userInfoUrl: "https://openapi.qoder.com.cn/api/v1/userinfo",
+    quotaUsageUrl: "https://openapi.qoder.com.cn/api/v2/quota/usage",
+    loginUrl: "https://qoder.com.cn/device/selectAccounts",
+  },
+  features: {
+    usage: true,
+    usageApikey: true,
+  },
+};

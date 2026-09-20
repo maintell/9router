@@ -1,11 +1,19 @@
 /**
  * Qoder API constants ported from CLIProxyAPIPlus qoder-provider branch.
  *
- * Endpoint set:
+ * International endpoint set (.sh):
  *   openapi.qoder.sh   - device flow + userinfo + quota usage
  *   center.qoder.sh    - token refresh (best-effort, currently 403 for device tokens)
  *   api3.qoder.sh      - inference (chat) + model list, requires COSY signing
  *   qoder.com/device   - browser landing page for device authorization
+ *
+ * China endpoint set (.com.cn, used by qoderclicn):
+ *   openapi.qoder.com.cn - device flow + userinfo + quota + PAT exchange
+ *   gateway.qoder.com.cn - inference (chat) + model list, requires COSY signing
+ *
+ * The COSY signing algorithm is identical across regions (verified live: a chat
+ * request signed with the shared implementation returned 200 from the CN
+ * gateway). Only the hosts differ.
  */
 
 export const QODER_OPENAPI_BASE = "https://openapi.qoder.sh";
@@ -14,6 +22,12 @@ export const QODER_CHAT_BASE = "https://api3.qoder.sh";
 // Job-token (jt-...) traffic is rejected by api3 with "Login expired" (403);
 // the official qodercli serves it from api2 instead.
 export const QODER_CHAT_BASE_ALT = "https://api2.qoder.sh";
+
+// China (qoderclicn) bases. Unlike the international set, the CN gateway
+// serves both api2-style (job token) and api3-style traffic — no alternate
+// host is needed.
+export const QODER_CN_OPENAPI_BASE = "https://openapi.qoder.com.cn";
+export const QODER_CN_GATEWAY_BASE = "https://gateway.qoder.com.cn";
 
 export const QODER_LOGIN_URL = "https://qoder.com/device/selectAccounts";
 
@@ -27,6 +41,12 @@ export const QODER_REFRESH_TOKEN_URL = `${QODER_CENTER_BASE}/algo/api/v3/user/re
 // PATs cannot sign COSY requests directly — they must be exchanged first.
 // This endpoint is NOT COSY-signed (plain JSON POST).
 export const QODER_JOB_TOKEN_EXCHANGE_URL = `${QODER_OPENAPI_BASE}/api/v1/jobToken/exchange`;
+
+// China equivalents of the openapi endpoints above. Verified live.
+export const QODER_CN_JOB_TOKEN_EXCHANGE_URL = `${QODER_CN_OPENAPI_BASE}/api/v1/jobToken/exchange`;
+export const QODER_CN_USERINFO_URL = `${QODER_CN_OPENAPI_BASE}/api/v1/userinfo`;
+export const QODER_CN_QUOTA_USAGE_URL = `${QODER_CN_OPENAPI_BASE}/api/v2/quota/usage`;
+export const QODER_CN_MODEL_LIST_URL = `${QODER_CN_GATEWAY_BASE}/algo/api/v2/model/list`;
 
 // Inference endpoints (under /algo on api3.qoder.sh, all COSY-signed)
 export const QODER_CHAT_SIG_PATH = "/api/v2/service/pro/sse/agent_chat_generation";
@@ -51,11 +71,26 @@ export const QODER_CONTEXT_TIER_ENV = "QODER_CONTEXT_TIER";
 export const QODER_CONTEXT_TIER_MODES = Object.freeze({ AUTO: "auto", MAX: "max", DEFAULT: "default" });
 
 /**
+ * Provider id for the China (qoderclicn) deployment. Its domain family
+ * (.com.cn) is completely separate from the international one (.sh).
+ */
+export const QODER_CN_PROVIDER_ID = "qoder-cn";
+
+export function isQoderCn(credentials) {
+  const id = credentials?.provider || credentials?.providerId || "";
+  return id === QODER_CN_PROVIDER_ID;
+}
+
+/**
  * Job-token (jt-...) traffic must hit api2.qoder.sh — api3 rejects jt- with
  * "Login expired" (403). Device tokens (dt-...) stay on api3. PATs (pt-...)
  * are exchanged for jt- before this is consulted.
+ *
+ * China traffic always uses the CN gateway: unlike the international set it
+ * serves both job-token and device-token inference from the same host.
  */
 export function qoderInferenceBase(credentials) {
+  if (isQoderCn(credentials)) return QODER_CN_GATEWAY_BASE;
   const raw = credentials?.apiKey || credentials?.accessToken;
   if (
     typeof raw === "string" &&
