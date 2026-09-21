@@ -13,7 +13,7 @@ export default {
     textIcon: "OC",
     website: "https://opencode.ai/auth",
     notice: {
-      text: "OpenCode Go subscription: $5/mo (then  0/mo). Access to Kimi, GLM, Qwen, MiMo, MiniMax models.",
+      text: "OpenCode Go subscription: $5/mo (then 10/mo). Access to Kimi, GLM, Qwen, MiMo, MiniMax models.",
       apiKeyUrl: "https://opencode.ai/auth",
     },
   },
@@ -64,7 +64,7 @@ export default {
     // Qwen3.8-Flash per https://help.aliyun.com/zh/model-studio/qwen3-8-flash:
     // 1M context (max input 991808, max output 131072), multimodal
     // (text/image/video in), OpenAI + Anthropic compatible.
-    { id: "qwen3.8-flash", name: "Qwen 3.8 Flash", supportedFormats: ["openai", "claude"], contextLength: 1000000 },
+    { id: "qwen3.8-flash", name: "Qwen 3.8 Flash", supportedFormats: ["openai", "claude"] },
     { id: "qwen3.5-plus", name: "Qwen 3.5 Plus", supportedFormats: ["openai", "claude"] },
     { id: "qwen3.7-max", name: "Qwen 3.7 Max", supportedFormats: ["openai", "claude"] },
     { id: "qwen3.7-plus", name: "Qwen 3.7 Plus", supportedFormats: ["openai", "claude"] },

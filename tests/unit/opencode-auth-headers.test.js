@@ -47,11 +47,13 @@ describe("OpenCodeExecutor.buildHeaders credentials", () => {
   it("forwards a downstream x-opencode-session when present", async () => {
     const { OpenCodeExecutor } = await load();
     const ex = new OpenCodeExecutor("opencode");
+    // Well-formed upstream session id — passes normalize/translate unchanged.
+    const sid = "ses_17174fb68fecCQffOOmEyqgqld";
     const headers = ex.buildHeaders(
-      { apiKey: "k", rawHeaders: { "x-opencode-session": "ses_downstream" } },
+      { apiKey: "k", rawHeaders: { "x-opencode-session": sid } },
       false
     );
-    expect(headers["x-opencode-session"]).toBe("ses_downstream");
+    expect(headers["x-opencode-session"]).toBe(sid);
   });
 
   it("keeps Accept in sync with the stream flag", async () => {

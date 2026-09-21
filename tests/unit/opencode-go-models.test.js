@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import { PROVIDER_MODELS, getModelSupportedFormats, getModelTargetFormat } from "../../open-sse/config/providerModels.js";
+import { PROVIDERS } from "../../open-sse/config/providers.js";
+import { resolveTransport } from "../../open-sse/services/provider.js";
 
 const load = () => import("../../open-sse/providers/index.js");
 
@@ -20,7 +23,10 @@ describe("opencode-go model registry", () => {
     // Per https://help.aliyun.com/zh/model-studio/qwen3-8-flash: OpenAI +
     // Anthropic compatible, 1M context.
     expect(m.supportedFormats).toEqual(expect.arrayContaining(["openai", "claude"]));
-    expect(m.contextLength).toBe(1000000);
+    // Context/output limits live in capabilities PROVIDER_CAPABILITIES
+    // (single source), not the registry.
+    const { getCapabilitiesForModel } = await import("../../open-sse/providers/capabilities.js");
+    expect(getCapabilitiesForModel("opencode-go", "qwen3.8-flash").contextWindow).toBe(1000000);
   });
 
   it("includes the previously missing upstream models", async () => {
@@ -70,6 +76,17 @@ const CLAUDE_CAPABLE = ["minimax-m3", "minimax-m2.7", "minimax-m2.5",
   "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus"];
 // Models that also expose the OpenAI /responses endpoint.
 const RESPONSES_CAPABLE = ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4.1-flash"];
+describe("OpenCode Go thinking-suffix model lookup", () => {
+  it("preserves Responses routing for gpt-5.6-luna thinking variants", () => {
+    expect(getModelSupportedFormats("opencode-go", "gpt-5.6-luna(high)")).toEqual(["openai-responses"]);
+    expect(getModelTargetFormat("opencode-go", "gpt-5.6-luna(high)")).toBe("openai-responses");
+  });
+
+  it("preserves Responses routing for grok-4.6 thinking variants", () => {
+    expect(getModelSupportedFormats("opencode-go", "grok-4.6(high)")).toEqual(["openai-responses"]);
+    expect(getModelTargetFormat("opencode-go", "grok-4.6(high)")).toBe("openai-responses");
+  });
+});
 
 describe("OpenCode Go per-model supportedFormats", () => {
   it("declares [openai, claude] for MiniMax + Qwen models", async () => {
