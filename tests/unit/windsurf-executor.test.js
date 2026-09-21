@@ -165,7 +165,8 @@ describe("WindsurfExecutor class", () => {
     const ex = new WindsurfExecutor();
     expect(ex.provider).toBe("windsurf");
     expect(ex.config).toBeDefined();
-    expect(ex.config.baseUrl).toContain("server.self-serve.windsurf.com");
+    // ponytail: upstream moved base to server.codeium.com (was server.self-serve.windsurf.com)
+    expect(ex.config.baseUrl).toContain("server.codeium.com");
     expect(typeof ex.execute).toBe("function");
   });
 
@@ -187,12 +188,17 @@ describe("WindsurfExecutor class", () => {
 
   it("buildUrl returns the GetChatMessage endpoint", () => {
     const ex = new WindsurfExecutor();
-    expect(ex.buildUrl()).toBe("https://server.self-serve.windsurf.com/exa.language_server_pb.LanguageServerService/GetChatMessage");
+    // ponytail: upstream moved base to server.codeium.com (was server.self-serve.windsurf.com)
+    expect(ex.buildUrl()).toBe("https://server.codeium.com/exa.language_server_pb.LanguageServerService/GetChatMessage");
   });
 
-  it("PROVIDERS.windsurf baseUrl is the chat endpoint (registry in sync)", () => {
-    expect(PROVIDERS.windsurf.baseUrl).toBe(
-      "https://server.self-serve.windsurf.com/exa.language_server_pb.LanguageServerService/GetChatMessage"
-    );
+  it("PROVIDERS.windsurf baseUrl is the chat endpoint (registry in sync)", async () => {
+    // ponytail: registry/index.js currently hides windsurf (no tool-calling support),
+    // so PROVIDERS.windsurf may be undefined and the executor falls back to WS_CHAT_URL.
+    // Accept either source, but the URL must stay in sync.
+    const { default: windsurfRegistry } = await import("open-sse/providers/registry/windsurf.js");
+    const expected = "https://server.codeium.com/exa.language_server_pb.LanguageServerService/GetChatMessage";
+    expect(windsurfRegistry.transport.baseUrl).toBe(expected);
+    expect(PROVIDERS.windsurf?.baseUrl ?? new WindsurfExecutor().buildUrl()).toBe(expected);
   });
 });

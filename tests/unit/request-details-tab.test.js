@@ -22,7 +22,9 @@ beforeAll(async () => {
   vi.resetModules();
   db = await import("@/lib/db/index.js");
   await db.initDb();
-  await db.updateSettings({ enableObservability2: true, observabilityBatchSize: 1 });
+  // ponytail: upstream 3fab15ae renamed enableObservability2 → enableObservability
+  // (default false, opt-in); the old flag is now ignored and saves get dropped.
+  await db.updateSettings({ enableObservability: true, observabilityBatchSize: 1 });
 
   const { getAdapter } = await import("@/lib/db/driver.js");
   adapter = await getAdapter();

@@ -105,8 +105,11 @@ describe("Kiro external_idp (CLIProxyAPI) import and refresh", () => {
     expect(headers.TokenType).toBe("EXTERNAL_IDP");
     expect(headers.tokentype).toBeUndefined();
 
+    // ponytail: upstream 35b950be routes q.* first for EVERY auth method
+    // (CLIRO parity; kiro.dev path gateway 400s are terminal, amazon 401/403
+    // fall through), so external_idp now starts on q.*, not codewhisperer.*.
     expect(executor.buildUrl("claude-sonnet-4.5", true, 0, credentials)).toBe(
-      "https://codewhisperer.us-east-1.amazonaws.com/generateAssistantResponse"
+      "https://q.us-east-1.amazonaws.com/generateAssistantResponse"
     );
   });
 

@@ -11,7 +11,9 @@ import { openaiToKiroRequest } from "../../open-sse/translator/request/openai-to
 
 const contentOf = (result) =>
   result.conversationState.currentMessage.userInputMessage.content;
-const systemPromptOf = (result) => result.systemPrompt || "";
+// ponytail: upstream 1892ed77 removed top-level systemPrompt from the wire shape
+// (400 REQUEST_BODY_INVALID); the prompt travels in the first user turn's content.
+const systemPromptOf = (result) => result.systemPrompt ?? contentOf(result);
 
 describe("openaiToKiroRequest", () => {
   describe("basic message conversion", () => {
@@ -582,9 +584,15 @@ describe("openaiToKiroRequest", () => {
         {}
       );
 
-      expect(first.systemPrompt).toBe(second.systemPrompt);
-      expect(first.systemPrompt).not.toContain("Current time");
-      expect(first.conversationState.currentMessage.userInputMessage.content).toContain("Current time");
+      // ponytail: upstream 1892ed77 — no top-level wire field; thinking prefix
+      // travels in content, timestamp stays fresh per turn.
+      expect(first.systemPrompt).toBeUndefined();
+      expect(second.systemPrompt).toBeUndefined();
+      const stripTime = (s) => String(s).split("[Context:")[0];
+      const firstContent = first.conversationState.currentMessage.userInputMessage.content;
+      const secondContent = second.conversationState.currentMessage.userInputMessage.content;
+      expect(stripTime(firstContent)).toBe(stripTime(secondContent));
+      expect(firstContent).toContain("Current time");
     });
 
     it("replays frozen msg0 for explicit Kiro sessions while keeping current time fresh", () => {

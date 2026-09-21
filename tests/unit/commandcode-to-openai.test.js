@@ -117,11 +117,12 @@ describe("commandcode-to-openai — finish", () => {
 
 describe("commandcode-to-openai — error event", () => {
   it("stringifies object errors so client sees readable message", () => {
-    const { chunks } = feed([
+    // ponytail: upstream 092c84ea throws mid-stream errors instead of fake stop chunks
+    expect(() => feed([
       { type: "error", error: { type: "server_error", message: "Boom" } },
-    ]);
-    const text = chunks[0].choices[0].delta.content;
-    expect(text).toContain("Boom");
-    expect(text).not.toContain("[object Object]");
+    ])).toThrow(/\[CommandCode error: .*Boom/);
+    expect(() => feed([
+      { type: "error", error: { type: "server_error", message: "Boom" } },
+    ])).toThrowError(/"message":"Boom"/);
   });
 });

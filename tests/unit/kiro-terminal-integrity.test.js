@@ -705,12 +705,18 @@ describe("Kiro terminal integrity recovery", () => {
   });
 
   it("surfaces retry HTTP failures as SSE after heartbeat commits headers", async () => {
+    // ponytail: upstream 35b950be walks all 3 surfaces (q → codewhisperer →
+    // kiro.dev) on 401/403/404, so the bounded retry needs a 401 mock per
+    // surface or the exhausted mock throws, retries 502-waits, and times out.
+    const unauthorized = () => new Response("unauthorized", {
+      status: 401,
+      statusText: "Unauthorized"
+    });
     fetchMock
       .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(new Response("unauthorized", {
-        status: 401,
-        statusText: "Unauthorized"
-      }));
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(unauthorized());
 
     const result = await execute();
     const body = await result.response.text();
@@ -721,12 +727,17 @@ describe("Kiro terminal integrity recovery", () => {
   });
 
   it("bounds the retry HTTP error body", async () => {
+    // ponytail: same 3-surface 401 walk as above (upstream 35b950be) —
+    // one bounded body mock per surface.
+    const bigBody = () => new Response(`error-start-${"x".repeat(10_000)}-error-tail`, {
+      status: 401,
+      statusText: "Unauthorized"
+    });
     fetchMock
       .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(new Response(`error-start-${"x".repeat(10_000)}-error-tail`, {
-        status: 401,
-        statusText: "Unauthorized"
-      }));
+      .mockResolvedValueOnce(bigBody())
+      .mockResolvedValueOnce(bigBody())
+      .mockResolvedValueOnce(bigBody());
 
     const body = await (await execute()).response.text();
 

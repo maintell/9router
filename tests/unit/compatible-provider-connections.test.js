@@ -33,7 +33,10 @@ async function setupTestContext(nodeData) {
     POST,
     getProviderConnections,
     cleanup() {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      // ponytail: Windows EPERM when sqlite handle still open; best-effort only.
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
     },
   };
 }

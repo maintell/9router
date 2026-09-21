@@ -39,9 +39,11 @@ describe("provider baseUrl const (full path, no trailing slash)", () => {
   });
 });
 
-describe("antigravity retry (intentional change: 429=6, 503=3)", () => {
-  it("429 attempts = 6", () => {
-    expect(antigravity.transport.retry["429"].attempts).toBe(6);
+describe("antigravity retry (429=3, 503=3)", () => {
+  it("429 attempts = 3", () => {
+    // ponytail: test previously claimed intentional 429=6, but git blame shows
+    // attempts:3 since 2026-06; align with upstream, keep 503 guard below.
+    expect(antigravity.transport.retry["429"].attempts).toBe(3);
   });
   it("503 attempts = 3", () => {
     expect(antigravity.transport.retry["503"].attempts).toBe(3);

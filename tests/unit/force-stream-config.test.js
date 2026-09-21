@@ -71,6 +71,9 @@ vi.mock("../../open-sse/rtk/index.js", () => ({
 vi.mock("../../open-sse/rtk/headroom.js", () => ({
   compressWithHeadroom: vi.fn(async () => null),
   formatHeadroomLog: vi.fn(() => ""),
+  // ponytail: upstream chatCore also imports these two; mock must stay in sync.
+  formatHeadroomSizeLog: vi.fn(() => ""),
+  isHeadroomPhantomSavings: vi.fn(() => false),
 }));
 
 vi.mock("../../open-sse/providers/capabilities.js", () => ({

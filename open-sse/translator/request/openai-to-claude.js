@@ -253,6 +253,10 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map()) {
       }
     }
   } else if (msg.role === ROLE.ASSISTANT) {
+    // ponytail: reasoning_content must precede text/tool_use (Claude requires thinking first)
+    if (typeof msg.reasoning_content === "string" && msg.reasoning_content) {
+      blocks.push({ type: CLAUDE_BLOCK.THINKING, thinking: msg.reasoning_content });
+    }
     if (Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if (part.type === OPENAI_BLOCK.TEXT && part.text) {

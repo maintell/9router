@@ -35,11 +35,14 @@ describe("detectRequiredCapabilities", () => {
     expect(r.has("vision")).toBe(true);
   });
 
-  it("web_search tool -> search", () => {
+  it("web_search tool -> search (currently disabled upstream)", () => {
     const r = detectRequiredCapabilities({ messages: [{ role: "user", content: "q" }], tools: [
       { type: "web_search" },
     ] });
-    expect(r.has("search")).toBe(true);
+    // ponytail: upstream combo.js has search auto-switch "temporarily disabled
+    // (feature not wired yet)" — detects nothing. Keep test as guard; flip to
+    // toBe(true) when upstream re-enables search.
+    expect(r.has("search")).toBe(false);
   });
 
   it("responses input_image -> vision", () => {
@@ -68,7 +71,9 @@ describe("reorderByCapabilities", () => {
   it("keeps order when no model matches", () => {
     const models = ["deepseek/deepseek-chat", "deepseek/deepseek-reasoner"];
     const out = reorderByCapabilities(models, new Set(["vision"]));
-    expect(out).toBe(models);
+    // ponytail: upstream reorderByCapabilities always returns a new array
+    // (map/sort/map), so identity no longer holds — assert order/content instead.
+    expect(out).toStrictEqual(models);
   });
 
   it("single model -> unchanged", () => {

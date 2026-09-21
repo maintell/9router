@@ -14,15 +14,17 @@ describe("normalizeClaudePassthrough — haiku adaptive thinking (docs 11 §1)",
     expect(out.thinking).toEqual({ type: "adaptive" });
   });
 
-  it("hoists mid-conversation system messages into top-level system", () => {
+  it("folds mid-conversation system messages into the neighbouring user turn", () => {
+    // ponytail: upstream 8a81085a folds in place (cache-stable) instead of hoisting to top-level system
     const out = normalizeClaudePassthrough({
       messages: [
         { role: "user", content: "hi" },
         { role: "system", content: "be brief" },
       ],
     });
-    expect(out.system).toEqual([{ type: "text", text: "be brief" }]);
+    expect(out.system).toBeUndefined();
     expect(out.messages.every((m) => m.role !== "system")).toBe(true);
+    expect(JSON.stringify(out.messages)).toContain("be brief");
   });
 });
 
