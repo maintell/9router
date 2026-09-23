@@ -57,7 +57,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PROMOTE_LATEST_INPUT: ${{ inputs.promote_latest && 'true' || 'false' }}
-          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_NS: ${{ vars.DOCKERHUB_NAMESPACE }}
           DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           node <<'NODE'
@@ -108,11 +108,14 @@ jobs:
 
           const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
           const isOfficial = process.env.REPOSITORY === "decolua/9router";
-          const forkHasHub = !isOfficial && process.env.DH_USER && process.env.DH_TOKEN;
+          // Namespace must NOT come from a secret: outputs containing secret
+          // values are dropped by the runner ("may contain secret").
+          const ns = (process.env.DH_NS || "").trim();
+          const forkHasHub = !isOfficial && ns && process.env.DH_TOKEN;
           const publishDockerHub = isOfficial || forkHasHub;
           const dockerhubImage = isOfficial
             ? "decolua/9router"
-            : forkHasHub ? `${process.env.DH_USER}/9router` : "";
+            : forkHasHub ? `${ns}/9router` : "";
           const ghcrImage = `ghcr.io/${process.env.REPOSITORY.toLowerCase()}`;
           const isPrerelease = version.includes("-");
           const promoteLatest = (process.env.EVENT_NAME === "push" && !isPrerelease)
@@ -128,6 +131,7 @@ jobs:
           fs.appendFileSync(output, `ghcr_image=${ghcrImage}\n`);
 
           console.log(`Validated ${tag} at ${commit}`);
+          console.log(`DockerHub target: "${dockerhubImage}" (official=${isOfficial}, ns=${ns || "UNSET"}, token=${process.env.DH_TOKEN ? "set" : "UNSET"})`);
           console.log(`latest promotion: ${promoteLatest ? "enabled" : "disabled"}`);
           NODE
 
@@ -352,14 +356,14 @@ jobs:
           exit 1
 
       - name: Log in to Docker Hub
-        if: needs.prepare.outputs.publish_dockerhub == 'true'
+        if: needs.prepare.outputs.publish_dockerhub == 'true' && needs.prepare.outputs.dockerhub_image != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Publish version image to Docker Hub
-        if: needs.prepare.outputs.publish_dockerhub == 'true'
+        if: needs.prepare.outputs.publish_dockerhub == 'true' && needs.prepare.outputs.dockerhub_image != ''
         env:
           DOCKERHUB_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
           GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
