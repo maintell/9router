@@ -1,3 +1,20 @@
+# v0.5.82 (2026-09-21)
+
+## Features
+- **Agnes**: new provider with access-token-only OAuth (connect by pasting an access token, loopback-restricted callback, background token refresh)
+- **Qoder-CN**: new provider for the China deployment (`qoderclicn`), golden-snapshot test coverage
+- **Custom headers**: per-provider custom request headers with dashboard UI, sensitive-name warning, TTL-cached settings read, applied in `BaseExecutor.execute` after `buildHeaders`
+- **OpenCode**: provider page accepts a real API key (sent with the official User-Agent); free-tier rejection now explains the fix instead of echoing upstream JSON; proxy pool card restored
+- **OpenCode Go**: model list synced with upstream (37 models incl. `qwen3.8-flash` — 1M context, 131072 max output, vision; capabilities live in `PROVIDER_CAPABILITIES` as single source)
+- **Upstream**: merged `decolua/9router` v0.5.81 (OpenCode free-tier session handling, Kiro tool-name fixes, Command Code retries, Zed OAuth hardening, and more)
+
+## Fixes
+- **Usage**: content dedupe in `saveRequestUsage` no longer uses auto-generated millisecond timestamps as the idempotency key (concurrent same-ms requests were silently dropped); only explicit caller timestamps dedupe
+- **Translator**: OpenAI→Claude assistant `reasoning_content` is mapped to a Claude thinking block instead of being dropped
+- **Tests**: 74 tests aligned with upstream v0.5.81 behavior changes; 2 real implementation bugs found and fixed (above)
+
+---
+
 # v0.5.81 (2026-09-18)
 
 ## Features
