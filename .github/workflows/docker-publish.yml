@@ -23,8 +23,8 @@ concurrency:
   cancel-in-progress: false
   queue: max
 
-env:
-  DOCKERHUB_IMAGE: decolua/9router
+# DOCKERHUB_IMAGE derives in prepare (official -> decolua/9router;
+# fork with secrets -> <DOCKERHUB_USERNAME>/9router; else no Hub publish).
 
 jobs:
   prepare:
@@ -39,6 +39,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       commit: ${{ steps.release.outputs.commit }}
       publish_dockerhub: ${{ steps.release.outputs.publish_dockerhub }}
+      dockerhub_image: ${{ steps.release.outputs.dockerhub_image }}
       promote_latest: ${{ steps.release.outputs.promote_latest }}
       ghcr_image: ${{ steps.release.outputs.ghcr_image }}
 
@@ -56,6 +57,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           PROMOTE_LATEST_INPUT: ${{ inputs.promote_latest && 'true' || 'false' }}
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           node <<'NODE'
           const fs = require("fs");
@@ -104,7 +107,12 @@ jobs:
           }
 
           const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-          const publishDockerHub = process.env.REPOSITORY === "decolua/9router";
+          const isOfficial = process.env.REPOSITORY === "decolua/9router";
+          const forkHasHub = !isOfficial && process.env.DH_USER && process.env.DH_TOKEN;
+          const publishDockerHub = isOfficial || forkHasHub;
+          const dockerhubImage = isOfficial
+            ? "decolua/9router"
+            : forkHasHub ? `${process.env.DH_USER}/9router` : "";
           const ghcrImage = `ghcr.io/${process.env.REPOSITORY.toLowerCase()}`;
           const isPrerelease = version.includes("-");
           const promoteLatest = (process.env.EVENT_NAME === "push" && !isPrerelease)
@@ -114,7 +122,8 @@ jobs:
           fs.appendFileSync(output, `tag=${tag}\n`);
           fs.appendFileSync(output, `version=${version}\n`);
           fs.appendFileSync(output, `commit=${commit}\n`);
-          fs.appendFileSync(output, `publish_dockerhub=${publishDockerHub}\n`);
+          fs.appendFileSync(output, `publish_dockerhub=${publishDockerHub ? "true" : "false"}\n`);
+          fs.appendFileSync(output, `dockerhub_image=${dockerhubImage}\n`);
           fs.appendFileSync(output, `promote_latest=${promoteLatest}\n`);
           fs.appendFileSync(output, `ghcr_image=${ghcrImage}\n`);
 
@@ -250,6 +259,7 @@ jobs:
     timeout-minutes: 30
     env:
       GHCR_IMAGE: ${{ needs.prepare.outputs.ghcr_image }}
+      DOCKERHUB_IMAGE: ${{ needs.prepare.outputs.dockerhub_image }}
     permissions:
       contents: read
       packages: write

@@ -1,3 +1,19 @@
+# v0.5.87 (2026-09-23)
+
+## Upstream
+- Merged `decolua/9router` v0.5.83-v0.5.86: Xiaomi MiMo server-assisted desktop login + five account clusters + v2.6 models, Claude Opus 5.5, System One decision endpoint, OpenCode Zen provider, combo presets, analytics charts, verified multi-platform Docker publishing pipeline, and more
+
+## Features
+- **Qoder-CN**: now provided by upstream (region-table constants, COSY replay protection, full model list); fork's interim implementation superseded
+- **Docker**: publish workflow derives the Docker Hub target — official repo keeps `decolua/9router`, forks with `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` secrets push to `<username>/9router`
+
+## Fixes
+- **Registry**: dedupe duplicate `agnes` registration introduced during upstream merge (provider lookup and uniqueness tests depended on it)
+- **Capabilities**: restore `thinkingEffortSupported` on the exact `glm-5.2` entry (upstream 5c217d34 shadowed the pattern entry and silently dropped `reasoning_effort`)
+- **Tests**: 17 tests aligned with v0.5.85/v0.5.86 behavior changes
+
+---
+
 # v0.5.86 (2026-09-23)
 
 ## Features
