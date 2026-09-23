@@ -3,7 +3,7 @@ import { AzureExecutor } from "./azure.js";
 import { GeminiCLIExecutor } from "./gemini-cli.js";
 import { GithubExecutor } from "./github.js";
 import { IFlowExecutor } from "./iflow.js";
-import { QoderExecutor, QoderCnExecutor } from "./qoder.js";
+import { QoderExecutor } from "./qoder.js";
 import { KiroExecutor } from "./kiro.js";
 import { KimchiExecutor } from "./kimchi.js";
 import { CodexExecutor } from "./codex.js";
@@ -11,6 +11,7 @@ import { CursorExecutor } from "./cursor.js";
 import { VertexExecutor } from "./vertex.js";
 import { OpenCodeExecutor } from "./opencode.js";
 import { OpenCodeGoExecutor } from "./opencode-go.js";
+import { OpenCodeZenExecutor } from "./opencode-zen.js";
 import { GrokWebExecutor } from "./grok-web.js";
 import { GrokCliExecutor } from "./grok-cli.js";
 import { PerplexityWebExecutor } from "./perplexity-web.js";
@@ -34,7 +35,7 @@ const executors = {
   github: new GithubExecutor(),
   iflow: new IFlowExecutor(),
   qoder: new QoderExecutor(),
-  "qoder-cn": new QoderCnExecutor(),
+  "qoder-cn": new QoderExecutor("qoder-cn"),
   kiro: new KiroExecutor(),
   kimchi: new KimchiExecutor(),
   codex: new CodexExecutor(),
@@ -44,6 +45,7 @@ const executors = {
   "vertex-partner": new VertexExecutor("vertex-partner"),
   opencode: new OpenCodeExecutor(),
   "opencode-go": new OpenCodeGoExecutor(),
+  "opencode-zen": new OpenCodeZenExecutor(),
   "grok-web": new GrokWebExecutor(),
   "grok-cli": new GrokCliExecutor(),
   gcli: new GrokCliExecutor(), // Alias
@@ -81,7 +83,7 @@ export { AzureExecutor } from "./azure.js";
 export { GeminiCLIExecutor } from "./gemini-cli.js";
 export { GithubExecutor } from "./github.js";
 export { IFlowExecutor } from "./iflow.js";
-export { QoderExecutor, QoderCnExecutor } from "./qoder.js";
+export { QoderExecutor } from "./qoder.js";
 export { KiroExecutor } from "./kiro.js";
 export { KimchiExecutor } from "./kimchi.js";
 export { CodexExecutor } from "./codex.js";
@@ -90,6 +92,7 @@ export { VertexExecutor } from "./vertex.js";
 export { DefaultExecutor } from "./default.js";
 export { OpenCodeExecutor } from "./opencode.js";
 export { OpenCodeGoExecutor } from "./opencode-go.js";
+export { OpenCodeZenExecutor } from "./opencode-zen.js";
 export { GrokWebExecutor } from "./grok-web.js";
 export { GrokCliExecutor } from "./grok-cli.js";
 export { PerplexityWebExecutor } from "./perplexity-web.js";

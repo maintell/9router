@@ -291,6 +291,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         "codebuddy-cn",
         "codebuddy-intl",
         "qoder",
+        "qoder-cn",
         "grok-cli",
       ];
       if (deviceCodeProviders.includes(provider)) {
@@ -326,7 +327,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
               _authMethod: data._authMethod,
               _startUrl: data._startUrl,
             }
-          : provider === "qoder"
+          : (provider === "qoder" || provider === "qoder-cn")
           ? {
               _qoderNonce: data._qoderNonce,
               _qoderMachineId: data._qoderMachineId,
