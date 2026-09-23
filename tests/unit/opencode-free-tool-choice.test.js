@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PROVIDERS } from "../../open-sse/config/providers.js";
 import { OpenCodeExecutor } from "../../open-sse/executors/opencode.js";
+import { OPENCODE_FINGERPRINT_TOOLS } from "../../open-sse/utils/opencodeFingerprint.js";
 import { proxyAwareFetch } from "../../open-sse/utils/proxyFetch.js";
 
 vi.mock("../../open-sse/utils/proxyFetch.js", () => ({
@@ -13,6 +14,21 @@ const FREE_13 = "muse-spark-1.3-contributor-free";
 const CREDS = { connectionId: "opencode-free-tool-choice-test" };
 const INPUT = [{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }];
 const TOOLS = [{ type: "function", name: "get_weather", description: "w", parameters: { type: "object", properties: {} } }];
+
+// Upstream v0.5.86 (822aa958 "fix(opencode): cloak Responses requests that
+// already have tools") always appends the free-tier fingerprint quartet, even
+// when the caller already declared tools — skipping it returns 403 FreeTierError.
+// The caller's tools are kept verbatim in front, so the demotion assertions below
+// still check the ORIGINAL array survives untouched.
+const CLOAKED_TOOLS = [
+  ...TOOLS,
+  ...OPENCODE_FINGERPRINT_TOOLS.map((name) => ({
+    type: "function",
+    name,
+    description: "This tool is currently unavailable and must not be used.",
+    parameters: { type: "object", properties: {} },
+  })),
+];
 
 function responsesBody(model, tool_choice) {
   const body = { model, input: structuredClone(INPUT), tools: structuredClone(TOOLS) };
@@ -36,7 +52,7 @@ describe("opencode Free 1.3 tool_choice auto-only", () => {
       const body = responsesBody(model, structuredClone(choice));
       const out = new OpenCodeExecutor().transformRequest(model, body, true, CREDS);
       expect(out.tool_choice).toBe("auto");
-      expect(out.tools).toEqual(TOOLS);
+      expect(out.tools).toEqual(CLOAKED_TOOLS);
       expect(out.input).toEqual(INPUT);
     }
   });
@@ -46,14 +62,17 @@ describe("opencode Free 1.3 tool_choice auto-only", () => {
       FREE_13, responsesBody(FREE_13, "auto"), true, CREDS,
     );
     expect(autoOut.tool_choice).toBe("auto");
-    expect(autoOut.tools).toEqual(TOOLS);
+    expect(autoOut.tools).toEqual(CLOAKED_TOOLS);
     expect(autoOut.input).toEqual(INPUT);
 
     const absentOut = new OpenCodeExecutor().transformRequest(
       FREE_13, responsesBody(FREE_13, undefined), true, CREDS,
     );
-    expect("tool_choice" in absentOut).toBe(false);
-    expect(absentOut.tools).toEqual(TOOLS);
+    // Upstream v0.5.86: applyFingerprintTools() defaults a Responses request to
+    // "auto" once it supplies the cloaking tools (822aa958), so an absent
+    // tool_choice no longer stays absent — it lands on "auto".
+    expect(absentOut.tool_choice).toBe("auto");
+    expect(absentOut.tools).toEqual(CLOAKED_TOOLS);
     expect(absentOut.input).toEqual(INPUT);
   });
 
@@ -84,7 +103,7 @@ describe("opencode Free 1.3 tool_choice auto-only", () => {
     const sent = JSON.parse(actualInit.body);
     expect(sent.tool_choice).toBe("auto");
     expect(sent.model).toBe(FREE_13);
-    expect(sent.tools).toEqual(TOOLS);
+    expect(sent.tools).toEqual(CLOAKED_TOOLS);
     expect(sent.input).toEqual(INPUT);
   });
 });

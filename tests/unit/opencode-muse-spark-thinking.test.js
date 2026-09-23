@@ -4,6 +4,7 @@ import { PROVIDER_MODELS, getModelTargetFormat } from "../../open-sse/config/pro
 import { getThinkingLevels } from "../../open-sse/providers/thinkingLevels.js";
 import { FORMATS } from "../../open-sse/translator/formats.js";
 import { OpenCodeExecutor } from "../../open-sse/executors/opencode.js";
+import { OPENCODE_FINGERPRINT_TOOLS } from "../../open-sse/utils/opencodeFingerprint.js";
 import "../translator/registerAll.js";
 import { translateRequest } from "../../open-sse/translator/index.js";
 
@@ -15,6 +16,17 @@ const input = [{
   role: "user",
   content: [{ type: "input_text", text: "Think, then answer: 2 + 2?" }],
 }];
+
+// Upstream v0.5.86 always appends the OpenCode free-tier fingerprint quartet
+// (bash/glob/grep/read) to cloaked requests, see commit 822aa958
+// "fix(opencode): cloak Responses requests that already have tools" and
+// open-sse/utils/opencodeFingerprint.js. The caller's own tools stay in front.
+const fingerprintStubs = () => OPENCODE_FINGERPRINT_TOOLS.map((name) => ({
+  type: "function",
+  name,
+  description: "This tool is currently unavailable and must not be used.",
+  parameters: { type: "object", properties: {} },
+}));
 
 describe("OpenCode Free Muse Spark thinking", () => {
   it("advertises reasoning and the requested model limits", () => {
@@ -214,7 +226,7 @@ describe("OpenCode Free Muse Spark thinking", () => {
     // User message, function_call, function_call_output, and next user message survive
     const types = out.input.map((item) => item.type);
     expect(types).toEqual(["message", "function_call", "function_call_output", "message"]);
-    // Tools flattened and empty properties added
+    // Tools flattened and empty properties added; fingerprint decoys appended after them
     expect(out.tools).toEqual([
       {
         type: "function",
@@ -222,6 +234,7 @@ describe("OpenCode Free Muse Spark thinking", () => {
         description: "Run shell command",
         parameters: { type: "object", properties: {} },
       },
+      ...fingerprintStubs(),
     ]);
   });
 });

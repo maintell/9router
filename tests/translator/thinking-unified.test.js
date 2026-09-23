@@ -153,6 +153,12 @@ describe("applyThinking per provider format", () => {
     expect(out.thinking).toEqual({ type: "enabled" });
     expect(out.reasoning_effort).toBe(expected);
   });
+  // BUG (brought in by upstream v0.5.86, commit 5c217d34 "feat(capabilities):
+  // model capability metadata on /v1/models, combo aggregation, pattern fixes"):
+  // GLM-5.2+ accepts a reasoning_effort level (capabilities.js "GLM-5.2+").
+  // Regression guard: the exact MODEL_CAPABILITIES entry `glm-5.2` must keep
+  // thinkingEffortSupported:true, or it shadows the *glm-5.2* pattern entry
+  // and silently drops reasoning_effort (fixed post upstream 5c217d34).
   it("GLM-5.2 also gets reasoning_effort (supported from 5.2 onward)", () => {
     const out = apply("openai", "glm-5.2", { reasoning_effort: "low" }, "glm-cn");
     expect(out.reasoning_effort).toBe("low");
